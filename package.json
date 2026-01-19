@@ -1,0 +1,11 @@
+{
+    "name": "lmlang-monorepo",
+    "private": true,
+    "engines": {
+        "node": ">=24"
+    },
+    "packageManager": "pnpm@10.0.0",
+    "devDependencies": {
+        "typescript": "^5.8.0"
+    }
+}
