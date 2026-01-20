@@ -1,0 +1,9 @@
+import {write} from "lmlang/io";
+
+// Run code inside "py" python container, get result
+str msg = <py>
+    return { 'greeting': 'Hello from Python!' }
+</py>
+
+// Write result to console
+write(msg);
