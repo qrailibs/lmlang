@@ -15,10 +15,12 @@ import {
 } from "../parser/statements";
 import { Orchestrator } from "../orchestrator/Orchestrator";
 import { Context } from "./Context";
+import { makeError } from "../utils/Error";
 
 export class Interpreter {
     private context: Context = new Context();
     private orchestrator?: Orchestrator;
+    private source: string = "";
 
     constructor(orchestrator?: Orchestrator) {
         this.orchestrator = orchestrator;
@@ -49,7 +51,8 @@ export class Interpreter {
         });
     }
 
-    public async run(ast: AST): Promise<void> {
+    public async run(ast: AST, source: string): Promise<void> {
+        this.source = source;
         for (const statement of ast.statements) {
             await this.executeStatement(statement);
         }
@@ -61,22 +64,24 @@ export class Interpreter {
                 const defStmt = stmt as DefStatement;
                 const value = await this.evaluateExpression(defStmt.value);
 
-                // Strict assignment check
-                // Allow assignment if value is 'unknown' (runtime literal result)
+                // Runtime type check (safety net, though Scanner should catch mostly)
                 if (
                     value.type !== "unknown" &&
                     defStmt.varType !== value.type
                 ) {
+                    // Only check if types are definitely known and mismatching
+                    // This creates a nice runtime error if something slipped through or was dynamic
                     if (defStmt.varType === "dbl" && value.type === "int") {
-                        throw this.makeError(
+                        throw this.createError(
                             stmt,
-                            `Type Mismatch: Cannot assign '${value.type}' to '${defStmt.varType}'. Use double() conversion.`,
+                            `Runtime Type Mismatch: Cannot assign '${value.type}' to '${defStmt.varType}'.`,
+                            "Use double() conversion.",
                         );
                     }
 
-                    throw this.makeError(
+                    throw this.createError(
                         stmt,
-                        `Type Mismatch: Expected '${defStmt.varType}', got '${value.type}'`,
+                        `Runtime Type Mismatch: Expected '${defStmt.varType}', got '${value.type}'`,
                     );
                 }
 
@@ -121,10 +126,16 @@ export class Interpreter {
                 `Unknown statement type: ${(stmt as any).kind || stmt.constructor.name}`,
             );
         } catch (e: any) {
-            if (e.message.startsWith("[Line")) {
+            // Check if it's already a formatted error (starts with Error:)
+            // Our makeError returns an Error object where message starts with newline+Color codes etc.
+            // But standard Error might wrap it.
+            if (
+                e.message &&
+                (e.message.includes("--> line") || e.message.startsWith("\n"))
+            ) {
                 throw e;
             }
-            throw this.makeError(stmt, e.message);
+            throw this.createError(stmt, e.message);
         }
     }
 
@@ -178,10 +189,13 @@ export class Interpreter {
             }
             throw new Error(`Unknown expression type: ${(expr as any).type}`);
         } catch (e: any) {
-            if (e.message.startsWith("[Line")) {
+            if (
+                e.message &&
+                (e.message.includes("--> line") || e.message.startsWith("\n"))
+            ) {
                 throw e;
             }
-            throw this.makeError(expr, e.message);
+            throw this.createError(expr, e.message);
         }
     }
 
@@ -346,11 +360,16 @@ export class Interpreter {
         return val.value;
     }
 
-    private makeError(node: Statement | Expression, message: string): Error {
+    private createError(
+        node: Statement | Expression,
+        message: string,
+        hint?: string,
+    ): Error {
         const { loc } = node;
         if (loc) {
-            return new Error(`[Line ${loc.line}, Col ${loc.col}] ${message}`);
+            return makeError(this.source, loc, message, hint);
         }
+        // Fallback if no location
         return new Error(message);
     }
 }

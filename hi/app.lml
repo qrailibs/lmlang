@@ -6,4 +6,4 @@ int sum = <py>
     return np.sum([1, 2, 3])
 </py> ~ int;
 
-write("Sum output:", type sum, sum);
+write("Sum output:", type sum + 100);

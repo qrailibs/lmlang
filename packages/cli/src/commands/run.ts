@@ -28,6 +28,8 @@ export const runCommand = {
         const projectDir = nodePath.resolve(argv.path as string);
         const configPath = nodePath.join(projectDir, "config.yaml");
 
+        let entrypointPath: string | undefined;
+
         try {
             // 1. Read Config
             const configContent = await fs.readFile(configPath, "utf-8");
@@ -39,14 +41,14 @@ export const runCommand = {
 
             // 2. Initialize Orchestrator
             // Import from @lmlang/core
-            const { Orchestrator, Interpreter, Lexer, Parser } =
+            const { Orchestrator, Interpreter, Lexer, Parser, Scanner } =
                 await import("@lmlang/core");
 
             const orchestrator = new Orchestrator(config, projectDir);
             await orchestrator.init();
 
             // 3. Read Entrypoint
-            const entrypointPath = nodePath.join(projectDir, config.entrypoint);
+            entrypointPath = nodePath.join(projectDir, config.entrypoint);
             const code = await fs.readFile(entrypointPath, "utf-8");
 
             // 4. Interpret
@@ -54,21 +56,24 @@ export const runCommand = {
             const tokens = lexer.tokenize();
             const parser = new Parser(tokens);
             const ast = parser.parse();
+
+            const scanner = new Scanner(code);
+            scanner.scan(ast);
+
             const interpreter = new Interpreter(orchestrator);
 
-            await interpreter.run(ast);
+            await interpreter.run(ast, code);
 
             // Cleanup
             await orchestrator.destroy();
 
             console.log(chalk.green("\nExecution completed successfully."));
-        } catch (e: any) {
-            console.error(chalk.red(`Error: ${e.message}`));
-            if (e.code === "ENOENT") {
-                console.error(
-                    chalk.gray(`Could not find config.yaml at ${configPath}`),
-                );
-            }
+        } catch (e) {
+            const fileLocation = entrypointPath ? ` in ${entrypointPath}` : "";
+            console.error(
+                chalk.red(`Error${fileLocation}: `),
+                (e as Error).message,
+            );
             process.exit(1);
         }
     },

@@ -1,5 +1,6 @@
 import { Lexer } from "./lexer/Lexer";
 import { Parser } from "./parser/Parser";
+import { Scanner } from "./scanner/Scanner";
 import { Interpreter } from "./interpreter/Interpreter";
 
 export { Lexer } from "./lexer/Lexer";
@@ -13,11 +14,17 @@ export { Orchestrator } from "./orchestrator/Orchestrator";
 export * from "./orchestrator/Config";
 export * from "./orchestrator/container/IRuntimeContainer";
 
+export { Scanner } from "./scanner/Scanner";
+
 export async function interpret(code: string): Promise<void> {
     const lexer = new Lexer(code);
     const tokens = lexer.tokenize();
     const parser = new Parser(tokens);
     const ast = parser.parse();
+
+    const scanner = new Scanner(code);
+    scanner.scan(ast);
+
     const interpreter = new Interpreter();
-    await interpreter.run(ast);
+    await interpreter.run(ast, code);
 }
