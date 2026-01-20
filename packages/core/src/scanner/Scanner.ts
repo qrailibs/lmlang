@@ -1,20 +1,26 @@
-import { AST, VariableType } from "../parser/types";
+import { AST, VariableType, FunctionReturnType } from "../parser/types";
 import {
     Statement,
     DefStatement,
     ExpressionStatement,
+    AssignmentStatement,
 } from "../parser/statements";
 import { Expression } from "../parser/expressions";
-import { makeError } from "../utils/Error";
+import { makeError, LmlangError } from "../utils/Error";
 
 interface ScanContext {
     vars: Map<string, VariableType>;
     parent?: ScanContext;
+    expectedReturnType?: FunctionReturnType;
+}
+
+export interface ScannerResult {
+    errors: LmlangError[];
 }
 
 export class Scanner {
     private source: string;
-    private errors: Error[] = [];
+    private errors: LmlangError[] = [];
     private globalContext: ScanContext = { vars: new Map() };
 
     constructor(source: string) {
@@ -30,28 +36,33 @@ export class Scanner {
         // Add other builtins if needed
     }
 
-    public scan(ast: AST): void {
+    public scan(ast: AST): ScannerResult {
         this.errors = [];
-        // Reset context or use a fresh one for each scan?
-        // Typically scan is one-shot.
+        // Use a fresh context for each scan (resets vars)
+        this.globalContext = { vars: new Map() };
+        this.initializeBuiltins();
 
         for (const stmt of ast.statements) {
             try {
                 this.scanStatement(stmt, this.globalContext);
             } catch (e: any) {
-                // If makeError was used, it throws an Error.
-                // We can collect them or throw immediately.
-                // The requirements said: "runs only if no errors during scan"
-                // So we can collect multiple errors or throw first one.
-                // Let's throw immediately for now as per "makeError" style which returns an Error object,
-                // but usually we want to throw it.
-                if (e instanceof Error) {
-                    throw e;
+                if (e.name === "LmlangError" || e instanceof LmlangError) {
+                    this.errors.push(e);
                 } else {
-                    throw new Error(String(e));
+                    // Fallback for unknown errors
+                    // Try to extract location if possible from parser error pattern or default to 0,0
+                    // But assume it's just a message if generic
+                    this.errors.push(
+                        makeError(
+                            this.source,
+                            { line: 0, col: 0 },
+                            e.message || String(e),
+                        ),
+                    );
                 }
             }
         }
+        return { errors: this.errors };
     }
 
     private scanStatement(stmt: Statement, ctx: ScanContext) {
@@ -85,6 +96,43 @@ export class Scanner {
             return;
         }
 
+        if (stmt.kind === "AssignmentStatement") {
+            const assignStmt = stmt as AssignmentStatement;
+            const targetType = this.lookupVar(assignStmt.name, ctx);
+
+            if (!targetType) {
+                throw makeError(
+                    this.source,
+                    assignStmt.loc || { line: 0, col: 0 },
+                    `Variable '${assignStmt.name}' not found`,
+                );
+            }
+
+            const valueType = this.inferExpressionType(assignStmt.value, ctx);
+
+            if (
+                targetType !== "unknown" &&
+                valueType !== "unknown" &&
+                targetType !== valueType
+            ) {
+                // Allow int to dbl assignment?
+                if (targetType === "dbl" && valueType === "int") {
+                    throw makeError(
+                        this.source,
+                        assignStmt.loc || { line: 0, col: 0 },
+                        `Type Mismatch: Cannot assign '${valueType}' to '${targetType}'`,
+                        "Use double() conversion or ensure value is double.",
+                    );
+                }
+                throw makeError(
+                    this.source,
+                    assignStmt.loc || { line: 0, col: 0 },
+                    `Type Mismatch: Cannot assign '${valueType}' to '${targetType}'`,
+                );
+            }
+            return;
+        }
+
         if (stmt.kind === "ExpressionStatement") {
             this.inferExpressionType(
                 (stmt as ExpressionStatement).expression,
@@ -105,6 +153,66 @@ export class Scanner {
                     ctx.vars.set(varName, "unknown");
                 }
             }
+            return;
+        }
+
+        if (stmt.kind === "BlockStatement") {
+            const blockCtx: ScanContext = {
+                vars: new Map(),
+                parent: ctx,
+                expectedReturnType: ctx.expectedReturnType,
+            };
+            for (const s of (stmt as any).statements) {
+                // CAST: BlockStatement
+                this.scanStatement(s, blockCtx);
+            }
+            return;
+        }
+
+        if (stmt.kind === "ReturnStatement") {
+            const retStmt = stmt as any; // Cast ReturnStatement
+            // Check if return has value
+            if (retStmt.value) {
+                const exprType = this.inferExpressionType(retStmt.value, ctx);
+
+                if (
+                    ctx.expectedReturnType &&
+                    ctx.expectedReturnType !== "unknown"
+                ) {
+                    if (ctx.expectedReturnType === "void") {
+                        throw makeError(
+                            this.source,
+                            retStmt.loc || { line: 0, col: 0 },
+                            `Void function cannot return a value`,
+                        );
+                    }
+
+                    if (
+                        exprType !== "unknown" &&
+                        exprType !== ctx.expectedReturnType
+                    ) {
+                        throw makeError(
+                            this.source,
+                            retStmt.loc || { line: 0, col: 0 },
+                            `Invalid Return Type: Expected '${ctx.expectedReturnType}', got '${exprType}'`,
+                        );
+                    }
+                }
+            } else {
+                // No value returned
+                if (
+                    ctx.expectedReturnType &&
+                    ctx.expectedReturnType !== "unknown" &&
+                    ctx.expectedReturnType !== "void"
+                ) {
+                    throw makeError(
+                        this.source,
+                        retStmt.loc || { line: 0, col: 0 },
+                        `Expected return value of type '${ctx.expectedReturnType}'`,
+                    );
+                }
+            }
+
             return;
         }
     }
@@ -207,6 +315,25 @@ export class Scanner {
             return expr.targetType;
         }
 
+        if (expr.type === "UpdateExpression") {
+            const type = this.lookupVar(expr.varName, ctx);
+            if (!type) {
+                throw makeError(
+                    this.source,
+                    expr.loc || { line: 0, col: 0 },
+                    `Variable '${expr.varName}' not found`,
+                );
+            }
+            if (type !== "int" && type !== "dbl" && type !== "unknown") {
+                throw makeError(
+                    this.source,
+                    expr.loc || { line: 0, col: 0 },
+                    `Cannot perform '${expr.operator}' on type '${type}'`,
+                );
+            }
+            return type;
+        }
+
         if (expr.type === "TypeCheckExpression") {
             this.inferExpressionType(expr.value, ctx);
             return "str"; // type check returns string name of type
@@ -222,6 +349,81 @@ export class Scanner {
             return "unknown"; // runtime result is unknown
         }
 
+        if (expr.type === "LambdaExpression") {
+            // (params) : type => body
+            const lambda = expr as any; // LambdaExpression
+
+            // Create scope for lambda
+            const lambdaCtx: ScanContext = {
+                vars: new Map(),
+                parent: ctx,
+                expectedReturnType: lambda.returnType,
+            };
+
+            // Register params
+            for (const param of lambda.params) {
+                lambdaCtx.vars.set(param.name, param.type);
+            }
+
+            // check body
+            if (lambda.body) {
+                if (Array.isArray(lambda.body)) {
+                    // Block body
+                    let hasReturn = false;
+
+                    // Simple recursive check for return statement
+                    const checkReturns = (stmts: Statement[]): boolean => {
+                        for (const s of stmts) {
+                            if (s.kind === "ReturnStatement") return true;
+                            if (s.kind === "BlockStatement") {
+                                if (checkReturns((s as any).statements))
+                                    return true;
+                            }
+                        }
+                        return false;
+                    };
+
+                    hasReturn = checkReturns(lambda.body);
+
+                    for (const s of lambda.body) {
+                        this.scanStatement(s, lambdaCtx);
+                    }
+
+                    if (
+                        lambda.returnType !== "void" &&
+                        lambda.returnType !== "unknown" &&
+                        !hasReturn
+                    ) {
+                        throw makeError(
+                            this.source,
+                            lambda.loc || { line: 0, col: 0 },
+                            `Missing return statement in function expected to return '${lambda.returnType}'`,
+                        );
+                    }
+                } else {
+                    // Expression body
+                    const bodyType = this.inferExpressionType(
+                        lambda.body as Expression,
+                        lambdaCtx,
+                    );
+                    if (
+                        lambda.returnType !== "unknown" &&
+                        bodyType !== "unknown"
+                    ) {
+                        if (lambda.returnType !== bodyType) {
+                            throw makeError(
+                                this.source,
+                                lambda.loc || { line: 0, col: 0 },
+                                `Lambda Return Type Mismatch: Expected '${lambda.returnType}', got '${bodyType}'`,
+                            );
+                        }
+                    }
+                }
+            }
+
+            return "func";
+        }
+
         return "unknown";
     }
 
@@ -229,9 +431,8 @@ export class Scanner {
         name: string,
         ctx: ScanContext,
     ): VariableType | undefined {
-        // Simple scope lookup
-        // Currently only global context is used in this simple implementation
         if (ctx.vars.has(name)) return ctx.vars.get(name);
+        if (ctx.parent) return this.lookupVar(name, ctx.parent);
         return undefined;
     }
 }

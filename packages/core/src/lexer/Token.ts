@@ -5,4 +5,5 @@ export interface Token {
     value: string;
     line: number;
     col: number;
+    length?: number;
 }

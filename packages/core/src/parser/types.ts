@@ -4,6 +4,14 @@ export interface AST {
     statements: Statement[];
 }
 
+export interface SourceLocation {
+    line: number;
+    col: number;
+    len?: number; // Kept for backward compat/convenience
+    endLine: number;
+    endCol: number;
+}
+
 export type VariableType =
     | "str"
     | "int"
@@ -14,5 +22,7 @@ export type VariableType =
     | "func"
     | "err"
     | "unknown";
+
+export type FunctionReturnType = VariableType | "void";
 
 export { Expression } from "./expressions";

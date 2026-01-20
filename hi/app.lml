@@ -1,9 +1,7 @@
 import {write} from "lmlang/io";
 
-// Run code inside "py" python container, get result
-int sum = <py>
-    import numpy as np 
-    return np.sum([1, 2, 3])
-</py> ~ int;
+int calls = 0
+func sum = (): int => calls++
 
-write("Sum output:", type sum + 100);
+write("Calls:", sum());
+write("Calls:", sum());

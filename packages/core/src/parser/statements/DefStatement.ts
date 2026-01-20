@@ -1,6 +1,6 @@
 import { BaseStatement } from "./BaseStatement";
 import { Expression } from "../expressions";
-import { VariableType } from "../types";
+import { VariableType, SourceLocation } from "../types";
 
 export class DefStatement implements BaseStatement {
     kind = "DefStatement";
@@ -8,6 +8,6 @@ export class DefStatement implements BaseStatement {
         public name: string,
         public value: Expression,
         public varType: VariableType,
-        public loc?: { line: number; col: number },
+        public loc?: SourceLocation,
     ) {}
 }

@@ -13,6 +13,7 @@ export enum TokenType {
     TypeObj = "TypeObj",
     TypeNil = "TypeNil",
     TypeFunc = "TypeFunc",
+    TypeVoid = "TypeVoid",
     TypeErr = "TypeErr",
     TypeUnknown = "TypeUnknown",
 
@@ -27,6 +28,8 @@ export enum TokenType {
     RParen = "RParen", // )
     LAngle = "LAngle", // <
     RAngle = "RAngle", // >
+    Arrow = "Arrow", // =>
+    Colon = "Colon", // :
     Dot = "Dot", // .
     Comma = "Comma", // ,
     Semicolon = "Semicolon", // ;
@@ -37,6 +40,8 @@ export enum TokenType {
     DivideOp = "DivideOp", // /
     MultiplyOp = "MultiplyOp", // *
     ConvertOp = "ConvertOp", // ~
+    PlusPlus = "PlusPlus", // ++
+    MinusMinus = "MinusMinus", // --
 
     // Literals
     StringLiteral = "StringLiteral",

@@ -1,7 +1,7 @@
 import { TokenType } from "../lexer/TokenType";
-import { VariableType } from "./types";
+import { VariableType, FunctionReturnType } from "./types";
 
-export const TOKEN_TO_VAR_TYPE: Record<string, VariableType> = {
+export const TOKEN_TO_VAR_TYPE: Record<string, FunctionReturnType> = {
     [TokenType.TypeStr]: "str",
     [TokenType.TypeInt]: "int",
     [TokenType.TypeDbl]: "dbl",
@@ -9,6 +9,7 @@ export const TOKEN_TO_VAR_TYPE: Record<string, VariableType> = {
     [TokenType.TypeObj]: "obj",
     [TokenType.TypeNil]: "nil",
     [TokenType.TypeFunc]: "func",
+    [TokenType.TypeVoid]: "void",
     [TokenType.TypeErr]: "err",
     [TokenType.TypeUnknown]: "unknown",
 };

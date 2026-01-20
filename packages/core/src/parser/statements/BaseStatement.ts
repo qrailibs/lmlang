@@ -1,4 +1,6 @@
+import { SourceLocation } from "../types";
+
 export interface BaseStatement {
     kind: string;
-    loc?: { line: number; col: number };
+    loc?: SourceLocation;
 }

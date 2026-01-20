@@ -14,6 +14,7 @@ const KEYWORDS: Record<string, TokenType> = {
     obj: TokenType.TypeObj,
     nil: TokenType.TypeNil,
     func: TokenType.TypeFunc,
+    void: TokenType.TypeVoid,
     err: TokenType.TypeErr,
     unknown: TokenType.TypeUnknown,
 
@@ -112,11 +113,23 @@ export class Lexer {
             }
 
             if (char === "+") {
+                if (this.peekChar() === "+") {
+                    tokens.push(this.createToken(TokenType.PlusPlus, "++"));
+                    this.advance();
+                    this.advance();
+                    continue;
+                }
                 tokens.push(this.createToken(TokenType.PlusOp, "+"));
                 this.advance();
                 continue;
             }
             if (char === "-") {
+                if (this.peekChar() === "-") {
+                    tokens.push(this.createToken(TokenType.MinusMinus, "--"));
+                    this.advance();
+                    this.advance();
+                    continue;
+                }
                 tokens.push(this.createToken(TokenType.MinusOp, "-"));
                 this.advance();
                 continue;
@@ -138,7 +151,18 @@ export class Lexer {
             }
 
             if (char === "=") {
+                if (this.peekChar() === ">") {
+                    tokens.push(this.createToken(TokenType.Arrow, "=>"));
+                    this.advance(); // consume =
+                    this.advance(); // consume >
+                    continue;
+                }
                 tokens.push(this.createToken(TokenType.Equals, "="));
+                this.advance();
+                continue;
+            }
+            if (char === ":") {
+                tokens.push(this.createToken(TokenType.Colon, ":"));
                 this.advance();
                 continue;
             }
@@ -331,6 +355,7 @@ export class Lexer {
             value,
             line: startLine,
             col: startCol,
+            length: value.length + 2, // content + 2 quotes
         };
     }
 

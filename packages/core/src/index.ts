@@ -14,7 +14,8 @@ export { Orchestrator } from "./orchestrator/Orchestrator";
 export * from "./orchestrator/Config";
 export * from "./orchestrator/container/IRuntimeContainer";
 
-export { Scanner } from "./scanner/Scanner";
+export * from "./scanner/Scanner";
+export { LmlangError, makeError } from "./utils/Error";
 
 export async function interpret(code: string): Promise<void> {
     const lexer = new Lexer(code);

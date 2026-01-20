@@ -1,65 +1,73 @@
 import chalk from "chalk";
 
-/**
- * Creates a formatted error message pointing to a specific location in the source code.
- *
- * @param source The full source code string
- * @param loc The location object containing line and col (1-indexed)
- * @param message The error message
- * @param hint Optional hint to display below the error
- */
+export interface ErrorLocation {
+    line: number;
+    col: number;
+    len?: number;
+    endLine?: number;
+    endCol?: number;
+}
+
+export class LmlangError extends Error {
+    public rawMessage: string;
+    public loc: ErrorLocation;
+    public source?: string;
+    public hint?: string;
+
+    constructor(
+        message: string,
+        loc: ErrorLocation,
+        source?: string,
+        hint?: string,
+    ) {
+        // Construct formatted message
+        const lines = source ? source.split("\n") : [];
+        const lineIndex = loc.line - 1;
+        const lineContent = lines[lineIndex] || "";
+
+        const lineNumStr = String(loc.line);
+        const padding = " ".repeat(lineNumStr.length);
+
+        const errorHeader = `${chalk.red.bold("Error:")} ${chalk.bold(message)}`;
+        const locationLine = `${chalk.blue(padding)} ${chalk.blue("-->")} line ${loc.line}:${loc.col}`;
+        const pipeLine = `${chalk.blue(padding)} ${chalk.blue("|")}`;
+        const codeLine = `${chalk.blue(lineNumStr)} ${chalk.blue("|")} ${lineContent}`;
+
+        const pointerSpace = " ".repeat(Math.max(0, loc.col - 1));
+        const underlineLen = Math.max(1, loc.len || 1);
+        const pointer = chalk.red.bold("^".repeat(underlineLen));
+        const pointerLine = `${chalk.blue(padding)} ${chalk.blue("|")} ${pointerSpace}${pointer}`;
+
+        let output = [
+            errorHeader,
+            locationLine,
+            pipeLine,
+            codeLine,
+            pointerLine,
+            pipeLine,
+        ];
+
+        if (hint) {
+            const hintLine = `${chalk.blue(padding)} ${chalk.blue("=")} ${hint}`;
+            output.push(hintLine);
+        }
+
+        const formatted = "\n" + output.join("\n");
+
+        super(formatted);
+        this.name = "LmlangError";
+        this.rawMessage = message;
+        this.loc = loc;
+        this.source = source;
+        this.hint = hint;
+    }
+}
+
 export function makeError(
     source: string,
-    loc: { line: number; col: number },
+    loc: ErrorLocation,
     message: string,
     hint?: string,
-): Error {
-    if (!source) {
-        return new Error(
-            `${message}\n(Source code not available for detailed error reporting)`,
-        );
-    }
-
-    const lines = source.split("\n");
-    // loc.line is 1-indexed
-    const lineIndex = loc.line - 1;
-    const lineContent = lines[lineIndex];
-
-    const lineNumStr = String(loc.line);
-    const padding = " ".repeat(lineNumStr.length);
-
-    // Format:
-    // Error: [Message]
-    //    --> line [line]:[col]
-    //     |
-    // 10  | str x = 10
-    //     |     ^
-    //     |
-    //     = [Hint]
-
-    const errorHeader = `${chalk.red.bold("Error:")} ${chalk.bold(message)}`;
-    const locationLine = `${chalk.blue(padding)} ${chalk.blue("-->")} line ${loc.line}:${loc.col}`;
-    const pipeLine = `${chalk.blue(padding)} ${chalk.blue("|")}`;
-    const codeLine = `${chalk.blue(lineNumStr)} ${chalk.blue("|")} ${lineContent}`;
-
-    // Create pointer line
-    // loc.col is 1-indexed, so we need col-1 spaces
-    const pointerSpace = " ".repeat(Math.max(0, loc.col - 1));
-    const pointerLine = `${chalk.blue(padding)} ${chalk.blue("|")} ${pointerSpace}${chalk.red.bold("^")}`;
-
-    let output = [
-        errorHeader,
-        locationLine,
-        pipeLine,
-        codeLine,
-        pointerLine,
-        pipeLine,
-    ];
-
-    if (hint) {
-        const hintLine = `${chalk.blue(padding)} ${chalk.blue("=")} ${hint}`;
-        output.push(hintLine);
-    }
-
-    return new Error("\n" + output.join("\n"));
+): LmlangError {
+    return new LmlangError(message, loc, source, hint);
 }

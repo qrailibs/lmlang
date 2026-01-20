@@ -2,13 +2,18 @@
     "name": "lmlang-vscode",
     "displayName": "LMLang",
     "description": "Language support for LMLang",
-    "version": "0.0.1",
+    "version": "0.2.0",
     "publisher": "qrai",
+    "main": "./dist/extension.js",
+    "activationEvents": [
+        "onLanguage:lmlang"
+    ],
     "engines": {
         "vscode": "^1.70.0"
     },
     "scripts": {
-        "package": "pnpm dlx @vscode/vsce package"
+        "package": "vsce package --no-dependencies",
+        "build": "tsup"
     },
     "repository": {
         "type": "git",
@@ -17,6 +22,19 @@
     "categories": [
         "Programming Languages"
     ],
+    "dependencies": {
+        "@lmlang/core": "workspace:*",
+        "vscode-languageclient": "^9.0.1",
+        "vscode-languageserver": "^9.0.1",
+        "vscode-languageserver-textdocument": "^1.0.11"
+    },
+    "devDependencies": {
+        "@types/node": "^20.0.0",
+        "@types/vscode": "^1.70.0",
+        "@vscode/vsce": "^3.7.1",
+        "tsup": "^8.0.0",
+        "typescript": "^5.0.0"
+    },
     "contributes": {
         "languages": [
             {

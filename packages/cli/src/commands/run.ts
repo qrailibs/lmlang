@@ -44,24 +44,29 @@ export const runCommand = {
             const { Orchestrator, Interpreter, Lexer, Parser, Scanner } =
                 await import("@lmlang/core");
 
-            const orchestrator = new Orchestrator(config, projectDir);
-            await orchestrator.init();
-
-            // 3. Read Entrypoint
+            // 2. Read Entrypoint (Early read for scanning)
             entrypointPath = nodePath.join(projectDir, config.entrypoint);
             const code = await fs.readFile(entrypointPath, "utf-8");
 
-            // 4. Interpret
+            // 3. Static Analysis (Scanner)
             const lexer = new Lexer(code);
             const tokens = lexer.tokenize();
             const parser = new Parser(tokens);
             const ast = parser.parse();
 
             const scanner = new Scanner(code);
-            scanner.scan(ast);
+            const scanResult = scanner.scan(ast);
+            if (scanResult.errors.length > 0) {
+                // Throw the first error to be caught below
+                throw scanResult.errors[0];
+            }
 
+            // 4. Initialize Orchestrator (Only if scan passes)
+            const orchestrator = new Orchestrator(config, projectDir);
+            await orchestrator.init();
+
+            // 5. Interpret
             const interpreter = new Interpreter(orchestrator);
-
             await interpreter.run(ast, code);
 
             // Cleanup
@@ -73,6 +78,7 @@ export const runCommand = {
             console.error(
                 chalk.red(`Error${fileLocation}: `),
                 (e as Error).message,
+                "\n",
             );
             process.exit(1);
         }

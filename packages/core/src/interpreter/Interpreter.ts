@@ -6,16 +6,22 @@ import {
     RuntimeLiteral,
     TypeCheckExpression,
     TypeConversionExpression,
+    UpdateExpression,
 } from "../parser/expressions";
 import {
     Statement,
     DefStatement,
     ImportStatement,
     ExpressionStatement,
+    AssignmentStatement,
 } from "../parser/statements";
 import { Orchestrator } from "../orchestrator/Orchestrator";
 import { Context } from "./Context";
 import { makeError } from "../utils/Error";
+
+class ReturnSignal {
+    constructor(public value: RuntimeValue) {}
+}
 
 export class Interpreter {
     private context: Context = new Context();
@@ -85,7 +91,41 @@ export class Interpreter {
                     );
                 }
 
+                // Register variable
                 this.context.set(defStmt.name, value);
+                return;
+            }
+
+            if (stmt.kind === "AssignmentStatement") {
+                const assignStmt = stmt as AssignmentStatement;
+                const value = await this.evaluateExpression(assignStmt.value);
+
+                // Check current type compatibility
+                const currentVal = this.context.get(assignStmt.name);
+                if (currentVal) {
+                    if (
+                        value.type !== "unknown" &&
+                        currentVal.type !== "unknown" &&
+                        value.type !== currentVal.type
+                    ) {
+                        if (currentVal.type === "dbl" && value.type === "int") {
+                            // Allow int to dbl conversion?
+                            // If we want consistent runtime behavior with Def, we might enforce strictness or conversion.
+                            // For now let's enforce what Scanner enforces.
+                            // Scanner error message suggests: "Use double() conversion." so strict.
+                            throw this.createError(
+                                stmt,
+                                `Runtime Type Mismatch: Cannot assign '${value.type}' to '${currentVal.type}'.`,
+                            );
+                        }
+                        throw this.createError(
+                            stmt,
+                            `Runtime Type Mismatch: Expected '${currentVal.type}', got '${value.type}'`,
+                        );
+                    }
+                }
+
+                this.context.assign(assignStmt.name, value);
                 return;
             }
 
@@ -122,10 +162,36 @@ export class Interpreter {
                 return;
             }
 
+            if (stmt.kind === "ReturnStatement") {
+                const retStmt = stmt as any; // Cast
+                const value = await this.evaluateExpression(retStmt.value);
+                throw new ReturnSignal(value);
+            }
+
+            if (stmt.kind === "BlockStatement") {
+                const blockStmt = stmt as any; // Cast
+                // Create new scope
+                const parentCtx = this.context;
+                this.context = new Context(parentCtx);
+                try {
+                    for (const s of blockStmt.statements) {
+                        await this.executeStatement(s);
+                    }
+                } finally {
+                    this.context = parentCtx; // Restore scope
+                }
+                return;
+            }
+
+            throw new Error(
+                `Unknown statement type: ${(stmt as any).kind || stmt.constructor.name}`,
+            );
             throw new Error(
                 `Unknown statement type: ${(stmt as any).kind || stmt.constructor.name}`,
             );
         } catch (e: any) {
+            if (e instanceof ReturnSignal) throw e; // Propagate return
+
             // Check if it's already a formatted error (starts with Error:)
             // Our makeError returns an Error object where message starts with newline+Color codes etc.
             // But standard Error might wrap it.
@@ -168,6 +234,42 @@ export class Interpreter {
             if (expr.type === "TypeCheckExpression") {
                 return this.evaluateTypecheck(expr);
             }
+            if (expr.type === "UpdateExpression") {
+                const currentVal = this.context.get(expr.varName);
+                if (!currentVal)
+                    throw new Error(`Variable '${expr.varName}' not found`);
+
+                if (
+                    currentVal.type !== "int" &&
+                    currentVal.type !== "dbl" &&
+                    currentVal.type !== "unknown"
+                ) {
+                    throw new Error(
+                        `Cannot perform '${expr.operator}' on type '${currentVal.type}'`,
+                    );
+                }
+
+                const numVal = Number(currentVal.value);
+                const newVal = expr.operator === "++" ? numVal + 1 : numVal - 1;
+
+                const resultVal: RuntimeValue = {
+                    type:
+                        currentVal.type === "unknown"
+                            ? Number.isInteger(newVal)
+                                ? "int"
+                                : "dbl"
+                            : currentVal.type,
+                    value: newVal,
+                };
+
+                this.context.assign(expr.varName, resultVal);
+
+                if (expr.prefix) {
+                    return resultVal;
+                } else {
+                    return currentVal;
+                }
+            }
             if (expr.type === "BinaryExpression") {
                 return await this.evaluateBinaryExpression(expr);
             }
@@ -183,9 +285,52 @@ export class Interpreter {
                 const args = [];
                 for (const argExpr of expr.arguments) {
                     const res = await this.evaluateExpression(argExpr);
-                    args.push(this.unwrap(res)); // Unwrap for function calls
+                    args.push(res);
                 }
                 return await (funcWrapper.value as Function)(...args);
+            }
+            if (expr.type === "LambdaExpression") {
+                const lambda = expr as any; // LambdaExpression
+                const closureCtx = this.context; // Capture current scope
+
+                const jsFunc = async (...args: any[]) => {
+                    // Create function scope
+                    const parentCtx = this.context;
+                    this.context = new Context(closureCtx); // Use closure scope as parent
+
+                    // Bind params
+                    // Bind params
+                    for (let i = 0; i < lambda.params.length; i++) {
+                        const paramName = lambda.params[i].name;
+                        this.context.set(paramName, args[i]);
+                    }
+
+                    try {
+                        if (Array.isArray(lambda.body)) {
+                            // Block body
+                            for (const s of lambda.body) {
+                                await this.executeStatement(s);
+                            }
+                            // If we fall off end of function without return
+                            return { type: "nil", value: undefined };
+                        } else {
+                            // Expression body
+                            const res = await this.evaluateExpression(
+                                lambda.body,
+                            );
+                            return res;
+                        }
+                    } catch (e) {
+                        if (e instanceof ReturnSignal) {
+                            return e.value;
+                        }
+                        throw e;
+                    } finally {
+                        this.context = parentCtx;
+                    }
+                };
+
+                return { type: "func", value: jsFunc };
             }
             throw new Error(`Unknown expression type: ${(expr as any).type}`);
         } catch (e: any) {

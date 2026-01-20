@@ -104,7 +104,7 @@
         "types": {
             "patterns": [
                 {
-                    "match": "\\b(str|int|dbl|bool|obj|nil|func|err|unknown)\\b",
+                    "match": "\\b(str|int|dbl|bool|obj|nil|func|err|void|unknown)\\b",
                     "name": "storage.type.lml"
                 },
                 {

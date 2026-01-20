@@ -1,60 +1,80 @@
-import { VariableType } from "../types";
+import { VariableType, FunctionReturnType, SourceLocation } from "../types";
+import { Statement } from "../statements";
 
 export type Expression =
     | {
           type: "StringLiteral";
           value: string;
-          loc?: { line: number; col: number };
+          loc?: SourceLocation;
       }
-    | { type: "IntLiteral"; value: number; loc?: { line: number; col: number } }
+    | { type: "IntLiteral"; value: number; loc?: SourceLocation }
     | {
           type: "DoubleLiteral";
           value: number;
-          loc?: { line: number; col: number };
+          loc?: SourceLocation;
       }
     | {
           type: "BoolLiteral";
           value: boolean;
-          loc?: { line: number; col: number };
+          loc?: SourceLocation;
       }
     | {
           type: "VarReference";
           varName: string;
-          loc?: { line: number; col: number };
+          loc?: SourceLocation;
       }
+    | LambdaExpression
     | RuntimeLiteral
     | CallExpression
     // Operations
     | BinaryExpression
     | TypeCheckExpression
-    | TypeConversionExpression;
+    | TypeCheckExpression
+    | TypeConversionExpression
+    | UpdateExpression;
+
+export interface UpdateExpression {
+    type: "UpdateExpression";
+    operator: "++" | "--";
+    varName: string;
+    prefix: boolean;
+    loc?: SourceLocation;
+}
+
+export interface LambdaExpression {
+    type: "LambdaExpression";
+    params: { name: string; type: VariableType }[];
+    returnType: FunctionReturnType;
+    body: Expression | Statement[]; // One expression or block
+    loc?: SourceLocation;
+}
 
 export interface BinaryExpression {
     type: "BinaryExpression";
     operator: "+" | "-" | "*" | "/";
     left: Expression;
     right: Expression;
-    loc?: { line: number; col: number };
+    loc?: SourceLocation;
 }
 
 export interface TypeConversionExpression {
     type: "TypeConversionExpression";
     value: Expression;
     targetType: VariableType;
-    loc?: { line: number; col: number };
+    loc?: SourceLocation;
 }
 
 export interface TypeCheckExpression {
     type: "TypeCheckExpression";
     value: Expression;
-    loc?: { line: number; col: number };
+    loc?: SourceLocation;
 }
 
 export interface CallExpression {
     type: "CallExpression";
     callee: string;
     arguments: Expression[];
-    loc?: { line: number; col: number };
+    loc?: SourceLocation;
 }
 
 export interface RuntimeLiteral {
@@ -62,5 +82,5 @@ export interface RuntimeLiteral {
     runtimeName: string;
     attributes: Record<string, Expression>;
     code: string;
-    loc?: { line: number; col: number };
+    loc?: SourceLocation;
 }
