@@ -2,12 +2,29 @@ import { unify } from "./utils/unify";
 
 export const io = {
     /**
+     * Exit process
+     * @param code exit code
+     */
+    exit: (code?: number) => process.exit(code),
+
+    /**
      * Write message to stdout
      * @param message contents
      */
-    write: (...messages: unknown[]) => {
-        process.stdout.write(messages.map(unify).join("\n") + "\n");
-    },
+    write: Object.assign(
+        (...messages: unknown[]) => {
+            process.stdout.write(messages.map(unify).join("\n") + "\n");
+        },
+        {
+            /**
+             * Write raw message to stdout, without unification
+             * @param message contents
+             */
+            raw: (...messages: unknown[]) => {
+                process.stdout.write(messages.join("\n") + "\n");
+            },
+        },
+    ),
 
     /**
      * Read message from stdin

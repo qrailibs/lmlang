@@ -1,0 +1,46 @@
+{
+    "name": "lmlang-vscode",
+    "displayName": "LMLang",
+    "description": "Language support for LMLang",
+    "version": "0.0.1",
+    "publisher": "qrai",
+    "engines": {
+        "vscode": "^1.70.0"
+    },
+    "scripts": {
+        "package": "pnpm dlx @vscode/vsce package"
+    },
+    "repository": {
+        "type": "git",
+        "url": "https://github.com/qrailibs/lmlang.git"
+    },
+    "categories": [
+        "Programming Languages"
+    ],
+    "contributes": {
+        "languages": [
+            {
+                "id": "lmlang",
+                "aliases": [
+                    "LMLang",
+                    "lml"
+                ],
+                "extensions": [
+                    ".lml"
+                ],
+                "configuration": "./language-configuration.json"
+            }
+        ],
+        "grammars": [
+            {
+                "language": "lmlang",
+                "scopeName": "source.lml",
+                "path": "./syntaxes/lmlang.tmLanguage.json",
+                "embeddedLanguages": {
+                    "meta.embedded.block.javascript": "javascript",
+                    "meta.embedded.block.python": "python"
+                }
+            }
+        ]
+    }
+}

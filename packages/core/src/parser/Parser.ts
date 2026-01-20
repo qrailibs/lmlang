@@ -1,13 +1,9 @@
 import { Token } from "../lexer/Token";
 import { TokenType } from "../lexer/TokenType";
-import { AST, VariableType } from "./types";
+import { AST } from "./types";
 import { Expression, RuntimeLiteral, CallExpression } from "./expressions";
-import {
-    Statement,
-    DefStatement,
-    ImportStatement,
-    ExpressionStatement,
-} from "./statements";
+import { Statement, DefStatement, ImportStatement } from "./statements";
+import { TOKEN_TO_VAR_TYPE, TYPE_TOKENS } from "./TypeHelpers";
 
 export class Parser {
     private tokens: Token[];
@@ -35,13 +31,7 @@ export class Parser {
             return this.importStatement();
         }
         // Variable Declaration: Type Identifier = Expression
-        if (
-            this.check(TokenType.TypeStr) ||
-            this.check(TokenType.TypeInt) ||
-            this.check(TokenType.TypeObj) ||
-            this.check(TokenType.TypeDbl) ||
-            this.check(TokenType.TypeBool)
-        ) {
+        if (this.check(...TYPE_TOKENS)) {
             return this.defStatement();
         }
 
@@ -54,7 +44,15 @@ export class Parser {
             };
         }
 
-        if (this.check(TokenType.Identifier)) {
+        if (
+            this.check(TokenType.Identifier) ||
+            this.check(TokenType.IntLiteral) ||
+            this.check(TokenType.DoubleLiteral) ||
+            this.check(TokenType.StringLiteral) ||
+            this.check(TokenType.BoolLiteral) ||
+            this.check(TokenType.Type) ||
+            this.check(TokenType.LParen)
+        ) {
             const expr = this.expression();
             if (this.check(TokenType.Semicolon)) {
                 this.advance();
@@ -132,15 +130,7 @@ export class Parser {
             this.advance();
         }
 
-        // Map TokenType to VariableType
-        const typeMap: Record<string, VariableType> = {
-            [TokenType.TypeStr]: "str",
-            [TokenType.TypeInt]: "int",
-            [TokenType.TypeDbl]: "dbl",
-            [TokenType.TypeBool]: "bool",
-            [TokenType.TypeObj]: "obj",
-        };
-        const varType = typeMap[typeToken.type];
+        const varType = TOKEN_TO_VAR_TYPE[typeToken.type];
 
         if (!varType) {
             throw this.error(typeToken, `Unexpected type ${typeToken.type}`);
@@ -176,12 +166,12 @@ export class Parser {
     }
 
     private factor(): Expression {
-        let left = this.primary();
+        let left = this.conversion();
 
         while (this.match(TokenType.MultiplyOp, TokenType.DivideOp)) {
             const operator =
                 this.previous().type === TokenType.MultiplyOp ? "*" : "/";
-            const right = this.primary();
+            const right = this.conversion();
             left = {
                 type: "BinaryExpression",
                 operator: operator as "*" | "/",
@@ -192,6 +182,42 @@ export class Parser {
         }
 
         return left;
+    }
+
+    private conversion(): Expression {
+        let left = this.unary();
+
+        while (this.match(TokenType.ConvertOp)) {
+            const startToken = this.previous();
+            // Expect type token
+            if (this.match(...TYPE_TOKENS)) {
+                const typeToken = this.previous();
+                const targetType = TOKEN_TO_VAR_TYPE[typeToken.type];
+
+                left = {
+                    type: "TypeConversionExpression",
+                    value: left,
+                    targetType,
+                    loc: { line: startToken.line, col: startToken.col },
+                };
+            } else {
+                throw this.error(this.peek(), "Expected type for conversion");
+            }
+        }
+        return left;
+    }
+
+    private unary(): Expression {
+        if (this.match(TokenType.Type)) {
+            const token = this.previous();
+            const right = this.unary();
+            return {
+                type: "TypeCheckExpression",
+                value: right,
+                loc: { line: token.line, col: token.col },
+            };
+        }
+        return this.primary();
     }
 
     private primary(): Expression {
@@ -287,7 +313,7 @@ export class Parser {
     }
 
     private runtimeLiteral(): RuntimeLiteral {
-        // <js inputPath={inputPath}> ... </js>
+        // <name ctxField={value}> ... </name>
         const startToken = this.consume(TokenType.LAngle, "Expected '<'");
         const runtimeName = this.consume(
             TokenType.Identifier,
@@ -317,7 +343,7 @@ export class Parser {
             "Expected runtime code body",
         );
 
-        // Closing tag </js>
+        // Closing tag </name>
         this.consume(TokenType.LAngle, "Expected closing tag '<'");
         this.consume(TokenType.DivideOp, "Expected '/'");
         const closingName = this.consume(
@@ -344,8 +370,10 @@ export class Parser {
     private finishCall(callee: string, startToken?: Token): CallExpression {
         const token = startToken || this.previous();
         const args: Expression[] = [];
-        while (!this.check(TokenType.RParen) && !this.isAtEnd()) {
-            args.push(this.expression());
+        if (!this.check(TokenType.RParen)) {
+            do {
+                args.push(this.expression());
+            } while (this.match(TokenType.Comma));
         }
         this.consume(TokenType.RParen, "Expected ')'");
         return {
@@ -371,9 +399,10 @@ export class Parser {
         throw this.error(this.peek(), message);
     }
 
-    private check(type: TokenType): boolean {
+    private check(...types: TokenType[]): boolean {
         if (this.isAtEnd()) return false;
-        return this.peek().type === type;
+        const currentType = this.peek().type;
+        return types.includes(currentType);
     }
 
     private advance(): Token {

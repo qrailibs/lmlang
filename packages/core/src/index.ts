@@ -11,7 +11,7 @@ export * from "./parser/statements";
 export * from "./parser/expressions";
 export { Orchestrator } from "./orchestrator/Orchestrator";
 export * from "./orchestrator/Config";
-export * from "./orchestrator/runtime/Runtime";
+export * from "./orchestrator/container/IRuntimeContainer";
 
 export async function interpret(code: string): Promise<void> {
     const lexer = new Lexer(code);

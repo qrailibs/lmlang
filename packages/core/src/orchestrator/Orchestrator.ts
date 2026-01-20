@@ -1,11 +1,11 @@
 import { ProjectConfig } from "./Config";
-import { Runtime } from "./runtime/Runtime";
-import { NodeRuntime } from "./runtime/NodeRuntime";
-import { PythonRuntime } from "./runtime/PythonRuntime";
+import { IRuntimeContainer } from "./container/IRuntimeContainer";
+import { NodejsContainer } from "./container/NodejsContainer";
+import { PythonContainer } from "./container/PythonContainer";
 import chalk from "chalk";
 
 export class Orchestrator {
-    private runtimes: Map<string, Runtime> = new Map();
+    private containers: Map<string, IRuntimeContainer> = new Map();
 
     constructor(
         private config: ProjectConfig,
@@ -19,18 +19,26 @@ export class Orchestrator {
             ),
         );
 
-        for (const [name, container] of Object.entries(
+        for (const [name, containerConfig] of Object.entries(
             this.config.containers,
         )) {
-            let runtime: Runtime;
-            if (container.runtime === "nodejs") {
-                runtime = new NodeRuntime(name, this.projectDir, container);
-            } else if (container.runtime === "python") {
-                runtime = new PythonRuntime(name, this.projectDir, container);
+            let container: IRuntimeContainer;
+            if (containerConfig.runtime === "nodejs") {
+                container = new NodejsContainer(
+                    name,
+                    this.projectDir,
+                    containerConfig,
+                );
+            } else if (containerConfig.runtime === "python") {
+                container = new PythonContainer(
+                    name,
+                    this.projectDir,
+                    containerConfig,
+                );
             } else {
                 console.log(
                     chalk.red(
-                        `[Orchestrator] Unknown runtime: ${container.runtime}. Available: nodejs, python.\n`,
+                        `[Orchestrator] Unknown runtime: ${containerConfig.runtime}. Available: nodejs, python.\n`,
                     ),
                 );
 
@@ -40,8 +48,8 @@ export class Orchestrator {
             const startTime = Date.now();
             console.log(chalk.yellow(`[${name}] Initializing container...`));
 
-            await runtime.init();
-            this.runtimes.set(name, runtime);
+            await container.init();
+            this.containers.set(name, container);
 
             const endTime = Date.now();
             console.log(
@@ -57,26 +65,28 @@ export class Orchestrator {
     }
 
     public async execute(
-        runtimeName: string,
+        containerName: string,
         code: string,
         context: Record<string, any>,
     ): Promise<any> {
-        const runtime = this.runtimes.get(runtimeName);
-        if (!runtime) {
+        const container = this.containers.get(containerName);
+
+        if (!container) {
             console.log(
                 chalk.red(
-                    `[Orchestrator] Runtime '${runtimeName}' not found or not initialized in config.\n`,
+                    `[Orchestrator] Container '${containerName}' not found or not initialized in config.\n`,
                 ),
             );
 
-            throw new Error("Runtime not found");
+            throw new Error("Container not found.");
         }
-        return runtime.execute(code, context);
+
+        return container.execute(code, context);
     }
 
     public async destroy(): Promise<void> {
-        for (const runtime of this.runtimes.values()) {
-            await runtime.destroy();
+        for (const container of this.containers.values()) {
+            await container.destroy();
         }
 
         console.log();

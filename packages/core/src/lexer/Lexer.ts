@@ -8,10 +8,17 @@ const KEYWORDS: Record<string, TokenType> = {
 
     // Type annotations
     str: TokenType.TypeStr,
-    obj: TokenType.TypeObj,
     int: TokenType.TypeInt,
     dbl: TokenType.TypeDbl,
     bool: TokenType.TypeBool,
+    obj: TokenType.TypeObj,
+    nil: TokenType.TypeNil,
+    func: TokenType.TypeFunc,
+    err: TokenType.TypeErr,
+    unknown: TokenType.TypeUnknown,
+
+    // Operators
+    type: TokenType.Type,
 };
 
 export class Lexer {
@@ -104,16 +111,6 @@ export class Lexer {
                 continue;
             }
 
-            if (char === "/") {
-                tokens.push(this.createToken(TokenType.DivideOp, "/"));
-                this.advance();
-                continue;
-            }
-            if (char === "*") {
-                tokens.push(this.createToken(TokenType.MultiplyOp, "*"));
-                this.advance();
-                continue;
-            }
             if (char === "+") {
                 tokens.push(this.createToken(TokenType.PlusOp, "+"));
                 this.advance();
@@ -124,6 +121,22 @@ export class Lexer {
                 this.advance();
                 continue;
             }
+            if (char === "*") {
+                tokens.push(this.createToken(TokenType.MultiplyOp, "*"));
+                this.advance();
+                continue;
+            }
+            if (char === "/") {
+                tokens.push(this.createToken(TokenType.DivideOp, "/"));
+                this.advance();
+                continue;
+            }
+            if (char === "~") {
+                tokens.push(this.createToken(TokenType.ConvertOp, "~"));
+                this.advance();
+                continue;
+            }
+
             if (char === "=") {
                 tokens.push(this.createToken(TokenType.Equals, "="));
                 this.advance();
@@ -131,6 +144,12 @@ export class Lexer {
             }
             if (char === ";") {
                 tokens.push(this.createToken(TokenType.Semicolon, ";"));
+                this.advance();
+                continue;
+            }
+
+            if (char === ",") {
+                tokens.push(this.createToken(TokenType.Comma, ","));
                 this.advance();
                 continue;
             }

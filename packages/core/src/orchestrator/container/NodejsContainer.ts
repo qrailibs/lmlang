@@ -1,70 +1,11 @@
-import { Runtime } from "./Runtime";
-import { ContainerConfig } from "../Config";
-import { spawn, ChildProcess } from "child_process";
-import path from "path";
 import fs from "fs/promises";
+import path from "path";
+import { spawn, ChildProcess } from "child_process";
 import chalk from "chalk";
+import { ContainerConfig } from "../Config";
+import { IRuntimeContainer } from "./IRuntimeContainer";
 
-export class NodeRuntime implements Runtime {
-    private process?: ChildProcess;
-    private buffer = "";
-    private resolveExecution?: (value: any) => void;
-    private rejectExecution?: (reason?: any) => void;
-    private workDir: string;
-
-    constructor(
-        private name: string,
-        private projectDir: string,
-        private config: ContainerConfig,
-    ) {
-        this.workDir = path.join(projectDir, ".lml", "nodejs");
-    }
-
-    async init(): Promise<void> {
-        // 1. Prepare Workspace
-        await fs.mkdir(this.workDir, { recursive: true });
-
-        // 2. Generate package.json
-        const packageJson = {
-            name: "lmlang-nodejs-runtime",
-            private: true,
-            dependencies: this.config.dependencies || {},
-            type: "commonjs", // Ensure we can use require easily
-        };
-        await fs.writeFile(
-            path.join(this.workDir, "package.json"),
-            JSON.stringify(packageJson, null, 2),
-        );
-
-        // 3. Install Dependencies
-        // TODO: handle only npm, pnpm, yarn, bun. If not of these values -> throw error
-        const pkgManager = this.config.packageManager || "npm";
-        console.log(
-            chalk.yellow(
-                `[${this.name}] Installing dependencies with ${pkgManager}...`,
-            ),
-        );
-
-        await new Promise<void>((resolve, reject) => {
-            const installParam =
-                pkgManager === "npm" ? ["install", "--silent"] : ["install"]; // pnpm usually silent by default or less noisy
-            const child = spawn(pkgManager, installParam, {
-                cwd: this.workDir,
-                stdio: "inherit",
-            });
-            child.on("close", (code) => {
-                if (code === 0) resolve();
-                else
-                    reject(
-                        new Error(
-                            `Dependency installation failed with code ${code}`,
-                        ),
-                    );
-            });
-        });
-
-        // 4. Create REPL Script
-        const replScript = `
+const REPL_SCRIPT = /*js*/ `
 const { resolve } = require('path');
 const readline = require('readline');
 
@@ -111,13 +52,83 @@ rl.on('line', async (line) => {
     }
 });
 `;
-        await fs.writeFile(path.join(this.workDir, "repl.js"), replScript);
+
+/**
+ * Implements runtime container for Node.js
+ */
+export class NodejsContainer implements IRuntimeContainer {
+    /**
+     * Directory where dependencies will be installed
+     */
+    private cwd: string;
+
+    private process?: ChildProcess;
+    private buffer = "";
+    private resolveExecution?: (value: any) => void;
+    private rejectExecution?: (reason?: any) => void;
+
+    constructor(
+        private name: string,
+        private projectDir: string,
+        private config: ContainerConfig,
+    ) {
+        this.cwd = path.join(projectDir, ".lml", "nodejs");
+    }
+
+    async init(): Promise<void> {
+        // 1. Prepare Workspace
+        await fs.mkdir(this.cwd, { recursive: true });
+
+        // 2. Generate package.json
+        await fs.writeFile(
+            path.join(this.cwd, "package.json"),
+            JSON.stringify(
+                {
+                    name: "lmlang-runtime-container",
+                    private: true,
+                    dependencies: this.config.dependencies || {},
+                    type: "commonjs",
+                },
+                null,
+                2,
+            ),
+        );
+
+        // 3. Install Dependencies
+        // TODO: handle only npm, pnpm, yarn, bun. If not of these values -> throw error
+        const pkgManager = this.config.packageManager || "npm";
+        console.log(
+            chalk.yellow(
+                `[${this.name}] Installing dependencies with ${pkgManager}...`,
+            ),
+        );
+
+        await new Promise<void>((resolve, reject) => {
+            const installParam =
+                pkgManager === "npm" ? ["install", "--silent"] : ["install"]; // pnpm usually silent by default or less noisy
+            const child = spawn(pkgManager, installParam, {
+                cwd: this.cwd,
+                stdio: "inherit",
+            });
+            child.on("close", (code) => {
+                if (code === 0) resolve();
+                else
+                    reject(
+                        new Error(
+                            `Dependency installation failed with code ${code}`,
+                        ),
+                    );
+            });
+        });
+
+        // 4. Create REPL Script
+        const entrypoint = path.join(this.cwd, "index.js");
+        await fs.writeFile(entrypoint, REPL_SCRIPT);
 
         // 5. Spawn Persistent Process
         console.log(chalk.yellow(`[${this.name}] Spawning runtime process...`));
 
-        const replPath = path.join(this.workDir, "repl.js");
-        this.process = spawn("node", [replPath], { cwd: this.projectDir });
+        this.process = spawn("node", [entrypoint], { cwd: this.cwd });
 
         this.process.stdout?.setEncoding("utf-8");
         this.process.stderr?.pipe(process.stderr); // Pass stderr through
@@ -136,6 +147,7 @@ rl.on('line', async (line) => {
         // Setup persistent data listener
         this.process.stdout?.on("data", (data) => {
             this.buffer += data.toString();
+
             // Process complete lines
             let newlineIndex;
             while ((newlineIndex = this.buffer.indexOf("\n")) !== -1) {
@@ -169,7 +181,7 @@ rl.on('line', async (line) => {
     }
 
     async execute(code: string, context: Record<string, any>): Promise<any> {
-        if (!this.process) throw new Error("Runtime not started");
+        if (!this.process) throw new Error("Runtime not started yet.");
 
         return new Promise((resolve, reject) => {
             this.resolveExecution = resolve;

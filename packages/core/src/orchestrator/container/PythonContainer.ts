@@ -1,41 +1,40 @@
-import { Runtime } from "./Runtime";
-import { ContainerConfig } from "../Config";
-import { spawn, ChildProcess } from "child_process";
 import path from "path";
 import fs from "fs/promises";
+import { spawn, ChildProcess } from "child_process";
 import chalk from "chalk";
+import { ContainerConfig } from "../Config";
+import { IRuntimeContainer } from "./IRuntimeContainer";
 
-export class PythonRuntime implements Runtime {
-    private static readonly PYTHON_CLI = "python3";
-    private static readonly PIP_CLI = "pip3";
-
-    private process?: ChildProcess;
-    private workDir: string;
-    private resolveExecution?: (value: any) => void;
-    private rejectExecution?: (reason?: any) => void;
-
-    constructor(
-        private name: string,
-        private projectDir: string,
-        private config: ContainerConfig,
-    ) {
-        this.workDir = path.join(projectDir, ".lml", "python");
-    }
-
-    async init(): Promise<void> {
-        await fs.mkdir(this.workDir, { recursive: true });
-
-        // 1. Install Dependencies
-        await this.installDependencies();
-
-        // 2. Create REPL Script
-        const replScript = `
+const REPL_SCRIPT = `
 import sys
 import json
 import traceback
 
 print("__LML_READY__")
 sys.stdout.flush()
+
+def safe_json(obj, seen=None):
+    if seen is None:
+        seen = set()
+
+    obj_id = id(obj)
+    if obj_id in seen:
+        return "<circular>"
+    seen.add(obj_id)
+
+    if obj is None or isinstance(obj, (str, int, float, bool)):
+        return obj
+
+    if isinstance(obj, dict):
+        return {str(k): make_json_safe(v, seen) for k, v in obj.items()}
+
+    if isinstance(obj, (list, tuple, set)):
+        return [make_json_safe(v, seen) for v in obj]
+
+    if hasattr(obj, "__dict__"):
+        return make_json_safe(vars(obj), seen)
+
+    return str(obj)
 
 def run_repl():
     while True:
@@ -66,7 +65,7 @@ def run_repl():
             # Call wrapper and get result
             result = exec_globals['__lml_wrapper']()
             
-            print("__LML_RESULT__" + json.dumps(result))
+            print("__LML_RESULT__" + json.dumps(safe_json(result)))
             sys.stdout.flush()
             
         except Exception:
@@ -81,7 +80,36 @@ def run_repl():
 if __name__ == "__main__":
     run_repl()
 `;
-        await fs.writeFile(path.join(this.workDir, "repl.py"), replScript);
+
+/**
+ * Implements runtime container for Python 3
+ */
+export class PythonContainer implements IRuntimeContainer {
+    private static readonly PYTHON_CLI = "python3";
+    private static readonly PIP_CLI = "pip3";
+
+    private process?: ChildProcess;
+    private cwd: string;
+    private resolveExecution?: (value: any) => void;
+    private rejectExecution?: (reason?: any) => void;
+
+    constructor(
+        private name: string,
+        private projectDir: string,
+        private config: ContainerConfig,
+    ) {
+        this.cwd = path.join(projectDir, ".lml", "python");
+    }
+
+    async init(): Promise<void> {
+        await fs.mkdir(this.cwd, { recursive: true });
+
+        // 1. Install Dependencies
+        await this.installDependencies();
+
+        // 2. Create REPL Script
+        const entrypoint = path.join(this.cwd, "main.py");
+        await fs.writeFile(entrypoint, REPL_SCRIPT);
 
         // 3. Spawn
         console.log(chalk.yellow(`[${this.name}] Spawning runtime process...`));
@@ -90,16 +118,14 @@ if __name__ == "__main__":
         const env = {
             ...process.env,
             PYTHONPATH:
-                this.workDir +
+                this.cwd +
                 (process.env.PYTHONPATH
                     ? path.delimiter + process.env.PYTHONPATH
                     : ""),
         };
 
         // We need to execute the repl script which is in workDir
-        const replPath = path.join(this.workDir, "repl.py");
-
-        this.process = spawn(PythonRuntime.PYTHON_CLI, [replPath], {
+        this.process = spawn(PythonContainer.PYTHON_CLI, [entrypoint], {
             cwd: this.projectDir,
             env,
         });
@@ -155,15 +181,12 @@ if __name__ == "__main__":
 
         if (packages.length > 0) {
             const pipArgs = ["install", ...packages];
-            // Check if venv is needed? Assuming system python or container context for now.
-            // Ideally: python -m venv venv && source venv/bin/activate
-            // MVP: Install using pip to user/system (might fail without --user or venv)
-            // Let's use `pip install --target .` to install locally in workDir
             pipArgs.push("--target", ".");
+            pipArgs.push("--quiet");
 
-            await new Promise<void>((resolve, reject) => {
-                const child = spawn(PythonRuntime.PIP_CLI, pipArgs, {
-                    cwd: this.workDir,
+            return new Promise<void>((resolve, reject) => {
+                const child = spawn(PythonContainer.PIP_CLI, pipArgs, {
+                    cwd: this.cwd,
                     stdio: "inherit",
                 });
                 child.on("close", (code) => {

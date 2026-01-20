@@ -3,13 +3,18 @@ export enum TokenType {
     Import = "Import",
     From = "From",
     Return = "Return",
+    Type = "Type", // type
 
     // Types
     TypeStr = "TypeStr",
-    TypeObj = "TypeObj",
     TypeInt = "TypeInt",
     TypeDbl = "TypeDbl",
     TypeBool = "TypeBool",
+    TypeObj = "TypeObj",
+    TypeNil = "TypeNil",
+    TypeFunc = "TypeFunc",
+    TypeErr = "TypeErr",
+    TypeUnknown = "TypeUnknown",
 
     // Identifiers
     Identifier = "Identifier",
@@ -22,14 +27,16 @@ export enum TokenType {
     RParen = "RParen", // )
     LAngle = "LAngle", // <
     RAngle = "RAngle", // >
-    DivideOp = "DivideOp", // / (was Slash)
     Dot = "Dot", // .
+    Comma = "Comma", // ,
     Semicolon = "Semicolon", // ;
 
     // Math Operators
     PlusOp = "PlusOp", // +
     MinusOp = "MinusOp", // -
+    DivideOp = "DivideOp", // /
     MultiplyOp = "MultiplyOp", // *
+    ConvertOp = "ConvertOp", // ~
 
     // Literals
     StringLiteral = "StringLiteral",

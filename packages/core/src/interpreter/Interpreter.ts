@@ -1,7 +1,12 @@
 import chalk from "chalk";
 import { packages } from "@lmlang/library";
 import { AST } from "../parser/types";
-import { Expression, RuntimeLiteral } from "../parser/expressions";
+import {
+    Expression,
+    RuntimeLiteral,
+    TypeCheckExpression,
+    TypeConversionExpression,
+} from "../parser/expressions";
 import {
     Statement,
     DefStatement,
@@ -63,12 +68,13 @@ export class Interpreter {
                     defStmt.varType !== value.type
                 ) {
                     if (defStmt.varType === "dbl" && value.type === "int") {
-                        throw this.createError(
+                        throw this.makeError(
                             stmt,
                             `Type Mismatch: Cannot assign '${value.type}' to '${defStmt.varType}'. Use double() conversion.`,
                         );
                     }
-                    throw this.createError(
+
+                    throw this.makeError(
                         stmt,
                         `Type Mismatch: Expected '${defStmt.varType}', got '${value.type}'`,
                     );
@@ -118,7 +124,7 @@ export class Interpreter {
             if (e.message.startsWith("[Line")) {
                 throw e;
             }
-            throw this.createError(stmt, e.message);
+            throw this.makeError(stmt, e.message);
         }
     }
 
@@ -142,11 +148,17 @@ export class Interpreter {
                     throw new Error(`Variable '${expr.varName}' not found`);
                 return val as RuntimeValue;
             }
-            if (expr.type === "BinaryExpression") {
-                return this.evaluateBinaryExpression(expr);
-            }
             if (expr.type === "RuntimeLiteral") {
                 return this.executeRuntimeLiteral(expr);
+            }
+            if (expr.type === "TypeConversionExpression") {
+                return this.evaluateTypeConversion(expr);
+            }
+            if (expr.type === "TypeCheckExpression") {
+                return this.evaluateTypecheck(expr);
+            }
+            if (expr.type === "BinaryExpression") {
+                return await this.evaluateBinaryExpression(expr);
             }
             if (expr.type === "CallExpression") {
                 const funcWrapper = this.context.get(
@@ -169,8 +181,24 @@ export class Interpreter {
             if (e.message.startsWith("[Line")) {
                 throw e;
             }
-            throw this.createError(expr, e.message);
+            throw this.makeError(expr, e.message);
         }
+    }
+
+    private async evaluateTypeConversion(
+        expr: TypeConversionExpression,
+    ): Promise<RuntimeValue> {
+        const { value } = await this.evaluateExpression(expr.value);
+
+        return { type: expr.targetType, value };
+    }
+
+    private async evaluateTypecheck(
+        expr: TypeCheckExpression,
+    ): Promise<RuntimeValue> {
+        const { type } = await this.evaluateExpression(expr.value);
+
+        return { type: "str", value: type };
     }
 
     private async evaluateBinaryExpression(expr: any): Promise<RuntimeValue> {
@@ -276,19 +304,22 @@ export class Interpreter {
                 ),
             );
 
-            return { type: "obj", value: undefined };
+            // Return nothing
+            return { type: "nil", value: undefined };
         }
 
-        const context: Record<string, any> = {};
+        // Pass context into runtime
+        const ctx: Record<string, unknown> = {};
         for (const [key, valExpr] of Object.entries(block.attributes || {})) {
             const res = await this.evaluateExpression(valExpr as Expression);
-            context[key] = this.unwrap(res); // Unwrap for external runtime
+            ctx[key] = this.unwrap(res); // Unwrap for external runtime
         }
 
+        // Execute code inside container, via orchestrator
         const result = await this.orchestrator.execute(
             actualRuntimeName,
             block.code,
-            context,
+            ctx,
         );
 
         // Return as unknown for now
@@ -298,14 +329,16 @@ export class Interpreter {
 
     private wrap(val: any): RuntimeValue {
         if (val === null || val === undefined)
-            return { type: "obj", value: null };
+            return { type: "nil", value: null };
         if (typeof val === "number") {
             return Number.isInteger(val)
                 ? { type: "int", value: val }
                 : { type: "dbl", value: val };
         }
         if (typeof val === "string") return { type: "str", value: val };
+        if (typeof val === "boolean") return { type: "bool", value: val };
         if (typeof val === "function") return { type: "func", value: val };
+        if (val instanceof Error) return { type: "err", value: val };
         return { type: "unknown", value: val };
     }
 
@@ -313,7 +346,7 @@ export class Interpreter {
         return val.value;
     }
 
-    private createError(node: Statement | Expression, message: string): Error {
+    private makeError(node: Statement | Expression, message: string): Error {
         const { loc } = node;
         if (loc) {
             return new Error(`[Line ${loc.line}, Col ${loc.col}] ${message}`);
@@ -322,11 +355,13 @@ export class Interpreter {
     }
 }
 
-type RuntimeValue =
+export type RuntimeValue =
+    | { type: "str"; value: string }
     | { type: "int"; value: number }
     | { type: "dbl"; value: number }
-    | { type: "str"; value: string }
     | { type: "bool"; value: boolean }
     | { type: "obj"; value: any }
-    | { type: "unknown"; value: any }
-    | { type: "func"; value: Function };
+    | { type: "nil"; value: null | undefined }
+    | { type: "func"; value: Function }
+    | { type: "unknown"; value: unknown }
+    | { type: "err"; value: unknown };

@@ -1,3 +1,5 @@
+import { VariableType } from "../types";
+
 export type Expression =
     | {
           type: "StringLiteral";
@@ -22,13 +24,29 @@ export type Expression =
       }
     | RuntimeLiteral
     | CallExpression
-    | BinaryExpression;
+    // Operations
+    | BinaryExpression
+    | TypeCheckExpression
+    | TypeConversionExpression;
 
 export interface BinaryExpression {
     type: "BinaryExpression";
     operator: "+" | "-" | "*" | "/";
     left: Expression;
     right: Expression;
+    loc?: { line: number; col: number };
+}
+
+export interface TypeConversionExpression {
+    type: "TypeConversionExpression";
+    value: Expression;
+    targetType: VariableType;
+    loc?: { line: number; col: number };
+}
+
+export interface TypeCheckExpression {
+    type: "TypeCheckExpression";
+    value: Expression;
     loc?: { line: number; col: number };
 }
 
