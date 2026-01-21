@@ -1,7 +1,6 @@
 import {write} from "lmlang/io";
 
-int calls = 0
-func sum = (): int => calls++
+int a = 100
+str b = a~str
 
-write("Calls:", sum());
-write("Calls:", sum());
+write(b)

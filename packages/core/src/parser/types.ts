@@ -1,4 +1,7 @@
 import { Statement } from "./statements";
+import { Expression } from "./expressions";
+
+export type ASTNode = Statement | Expression;
 
 export interface AST {
     statements: Statement[];

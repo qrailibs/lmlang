@@ -1,12 +1,25 @@
+import { RuntimeValue } from "../types";
+
 /**
- * This function is unifies the value to a string
+ * This function unifies the value to a string
  * @param val
  */
-export function unify(val: unknown) {
-    if (typeof val === "string") return `"${val}"`;
-    if (typeof val === "number") return String(val);
-    if (typeof val === "boolean") return val ? "True" : "False";
-    if (typeof val === "undefined") return "Undefined";
-    if (typeof val === "object") return JSON.stringify(val);
-    return String(val);
+export function unify(val: RuntimeValue): string {
+    const value = val.value;
+
+    if (val.type === "str") return `"${value}"`;
+    if (val.type === "int") return String(value);
+    if (val.type === "dbl") return String(value);
+    if (val.type === "bool") return value ? "True" : "False";
+    if (val.type === "nil") return "Nil";
+    if (val.type === "obj") return JSON.stringify(value);
+
+    // Fallback for unknown/other types
+    if (typeof value === "string") return `"${value}"`;
+    if (typeof value === "number") return String(value);
+    if (typeof value === "boolean") return value ? "True" : "False";
+    if (value === undefined || value === null) return "Nil";
+    if (typeof value === "object") return JSON.stringify(value);
+
+    return String(value);
 }

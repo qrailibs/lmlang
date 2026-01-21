@@ -23,6 +23,7 @@ export class Parser {
     public parse(): AST {
         const statements: Statement[] = [];
         while (!this.isAtEnd()) {
+            if (this.match(TokenType.Semicolon)) continue;
             statements.push(this.statement());
         }
         return { statements };
@@ -60,7 +61,21 @@ export class Parser {
 
     private statement(): Statement {
         if (this.match(TokenType.Semicolon)) {
-            // Skip empty statements/semicolons
+            // If we have a standalone semicolon, it's an empty statement.
+            // Since we don't have an EmptyStatement AST node, we rely on callers (parse/block) to skip it?
+            // OR we throw for now if we can't return.
+            // But 'statement()' MUST return a Statement.
+            // Changing strategy: callers skip semicolons.
+            // If we are here, caller didn't skip.
+            // We'll recurse, but we must ensure we don't hit EOF/RBrace.
+            if (this.isAtEnd() || this.check(TokenType.RBrace)) {
+                // This effectively means "Empty Statement at end of block".
+                // But we have to return something.
+                // Let's return a dummy block? Or fix callers.
+                // Fixing callers is better.
+                // But for this tool step, I'm just removing this block so callers MUST handle it?
+                // No, if I remove it, it will fall through to error "Expected statement... Found ;"
+            }
             return this.statement();
         }
 
@@ -197,6 +212,7 @@ export class Parser {
         const statements: Statement[] = [];
 
         while (!this.check(TokenType.RBrace) && !this.isAtEnd()) {
+            if (this.match(TokenType.Semicolon)) continue;
             statements.push(this.statement());
         }
 

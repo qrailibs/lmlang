@@ -1,3 +1,4 @@
+import { packages } from "@lmlang/library";
 import { AST, VariableType, FunctionReturnType } from "../parser/types";
 import {
     Statement,
@@ -8,8 +9,11 @@ import {
 import { Expression } from "../parser/expressions";
 import { makeError, LmlangError } from "../utils/Error";
 
+import { FunctionSignature } from "@lmlang/library/dist/types";
+
 interface ScanContext {
     vars: Map<string, VariableType>;
+    signatures: Map<string, FunctionSignature>;
     parent?: ScanContext;
     expectedReturnType?: FunctionReturnType;
 }
@@ -21,7 +25,10 @@ export interface ScannerResult {
 export class Scanner {
     private source: string;
     private errors: LmlangError[] = [];
-    private globalContext: ScanContext = { vars: new Map() };
+    private globalContext: ScanContext = {
+        vars: new Map(),
+        signatures: new Map(),
+    };
 
     constructor(source: string) {
         this.source = source;
@@ -39,7 +46,7 @@ export class Scanner {
     public scan(ast: AST): ScannerResult {
         this.errors = [];
         // Use a fresh context for each scan (resets vars)
-        this.globalContext = { vars: new Map() };
+        this.globalContext = { vars: new Map(), signatures: new Map() };
         this.initializeBuiltins();
 
         for (const stmt of ast.statements) {
@@ -146,12 +153,37 @@ export class Scanner {
             // For now, we assume imported things are 'unknown' or just register them if we can't resolve.
             // The current Interpreter mocks imports if not found.
             // We can register them as 'unknown' types in context.
-            const impStmt = stmt as any; // Cast to access fields
-            if (impStmt.imports) {
+            // Register imports
+            const impStmt = stmt as any;
+            if (packages[impStmt.moduleName]) {
+                const pkg = packages[impStmt.moduleName];
                 for (const imp of impStmt.imports) {
+                    const exportName = imp.name;
                     const varName = imp.alias || imp.name;
-                    ctx.vars.set(varName, "unknown");
+
+                    if (pkg[exportName]) {
+                        ctx.vars.set(varName, "func"); // Mostly functions
+                        // Store signature if available
+                        if (pkg[exportName].signature) {
+                            ctx.signatures.set(
+                                varName,
+                                pkg[exportName].signature,
+                            );
+                        }
+                    } else {
+                        throw makeError(
+                            this.source,
+                            impStmt.loc || { line: 0, col: 0 },
+                            `Export '${exportName}' not found in module '${impStmt.moduleName}'`,
+                        );
+                    }
                 }
+            } else {
+                throw makeError(
+                    this.source,
+                    impStmt.loc || { line: 0, col: 0 },
+                    `Module '${impStmt.moduleName}' not found`,
+                );
             }
             return;
         }
@@ -159,6 +191,7 @@ export class Scanner {
         if (stmt.kind === "BlockStatement") {
             const blockCtx: ScanContext = {
                 vars: new Map(),
+                signatures: new Map(),
                 parent: ctx,
                 expectedReturnType: ctx.expectedReturnType,
             };
@@ -294,9 +327,76 @@ export class Scanner {
                 );
             }
 
-            // Check args
-            for (const arg of expr.arguments) {
-                this.inferExpressionType(arg, ctx);
+            // Check args and signature
+            const signature = this.lookupSignature(expr.callee, ctx);
+
+            if (signature) {
+                // Verify arg count
+                // Handle rest parameters (starting with ...)
+                const hasRest = signature.params.some((p) =>
+                    p.name.startsWith("..."),
+                );
+
+                // Filter out optional arguments for min count check
+                const requiredParams = signature.params.filter(
+                    (p) => !p.name.endsWith("?") && !p.name.startsWith("..."),
+                );
+
+                if (!hasRest) {
+                    if (expr.arguments.length > signature.params.length) {
+                        throw makeError(
+                            this.source,
+                            expr.loc || { line: 0, col: 0 },
+                            `Too many arguments. Expected ${signature.params.length}, got ${expr.arguments.length}`,
+                        );
+                    }
+                    if (expr.arguments.length < requiredParams.length) {
+                        throw makeError(
+                            this.source,
+                            expr.loc || { line: 0, col: 0 },
+                            `Too few arguments. Expected at least ${requiredParams.length}, got ${expr.arguments.length}`,
+                        );
+                    }
+                }
+
+                // Verify arg types
+                for (let i = 0; i < expr.arguments.length; i++) {
+                    const argType = this.inferExpressionType(
+                        expr.arguments[i],
+                        ctx,
+                    );
+
+                    // Determine expected param
+                    let param = signature.params[i];
+                    if (!param && hasRest) {
+                        // Use the rest param
+                        param = signature.params[signature.params.length - 1];
+                    }
+
+                    if (param) {
+                        // Skip check for 'unknown' param type (like in print)
+                        if (param.type !== "unknown" && argType !== "unknown") {
+                            if (argType !== param.type) {
+                                throw makeError(
+                                    this.source,
+                                    expr.arguments[i].loc || {
+                                        line: 0,
+                                        col: 0,
+                                    },
+                                    `Argument Type Mismatch: Expected '${param.type}', got '${argType}'`,
+                                );
+                            }
+                        }
+                    }
+                }
+
+                // Return known return type
+                return (signature.returnType as VariableType) || "unknown";
+            } else {
+                // No signature, just infer args
+                for (const arg of expr.arguments) {
+                    this.inferExpressionType(arg, ctx);
+                }
             }
 
             // Return type of function call?
@@ -356,6 +456,7 @@ export class Scanner {
             // Create scope for lambda
             const lambdaCtx: ScanContext = {
                 vars: new Map(),
+                signatures: new Map(),
                 parent: ctx,
                 expectedReturnType: lambda.returnType,
             };
@@ -434,5 +535,193 @@ export class Scanner {
         if (ctx.vars.has(name)) return ctx.vars.get(name);
         if (ctx.parent) return this.lookupVar(name, ctx.parent);
         return undefined;
+    }
+
+    private lookupSignature(
+        name: string,
+        ctx: ScanContext,
+    ): FunctionSignature | undefined {
+        if (ctx.signatures.has(name)) return ctx.signatures.get(name);
+        if (ctx.parent) return this.lookupSignature(name, ctx.parent);
+        return undefined;
+    }
+    public getScopeAt(
+        ast: AST,
+        loc: { line: number; col: number },
+    ): ScanContext {
+        // Find deepest node
+        // Actually, we just need to traverse and stop at the deepest scope containing the loc.
+        // Or simpler: use similar logic to findNodeStack but for SCOPE.
+        // But we need the ScanContext populated.
+        // So we must "run" the scan up to that point.
+
+        let ctx = this.globalContext;
+        this.globalContext = { vars: new Map(), signatures: new Map() };
+        this.initializeBuiltins();
+        ctx = this.globalContext;
+
+        this.scanScope(ast.statements, ctx, loc);
+        return this.deepestScope || ctx; // fall back to global
+    }
+
+    private deepestScope: ScanContext | undefined;
+
+    private scanScope(
+        statements: Statement[],
+        ctx: ScanContext,
+        targetLoc: { line: number; col: number },
+    ) {
+        // If current scope contains loc, this might be the one, unless we go deeper.
+        // We track the "deepest" valid scope found so far.
+        // Actually, scanScope is called when we ARE in a scope that definitely overlaps (or is global).
+        this.deepestScope = ctx;
+
+        for (const stmt of statements) {
+            // Process declarations to populate ctx
+            if (stmt.kind === "DefStatement") {
+                const defStmt = stmt as DefStatement;
+                ctx.vars.set(defStmt.name, defStmt.varType);
+            } else if (stmt.kind === "AssignmentStatement") {
+                // assignment doesn't create vars
+            } else if (stmt.kind === "ImportStatement") {
+                // Register imports
+                const impStmt = stmt as any;
+                if (packages[impStmt.moduleName]) {
+                    const pkg = packages[impStmt.moduleName];
+                    for (const imp of impStmt.imports) {
+                        const exportName = imp.name;
+                        const varName = imp.alias || imp.name;
+                        if (pkg[exportName]) {
+                            ctx.vars.set(varName, "func");
+                            if (pkg[exportName].signature) {
+                                ctx.signatures.set(
+                                    varName,
+                                    pkg[exportName].signature,
+                                );
+                            }
+                        }
+                    }
+                }
+            }
+
+            // Check if we should dive into this statement
+            if (this.contains(stmt, targetLoc)) {
+                if (stmt.kind === "BlockStatement") {
+                    const blockCtx: ScanContext = {
+                        vars: new Map(),
+                        signatures: new Map(),
+                        parent: ctx,
+                        expectedReturnType: ctx.expectedReturnType,
+                    };
+                    this.scanScope(
+                        (stmt as any).statements,
+                        blockCtx,
+                        targetLoc,
+                    );
+                    return; // Found our path, no need to check other statements in this scope
+                } else if (stmt.kind === "DefStatement") {
+                    // Check value if lambda/block?
+                    const def = stmt as DefStatement;
+                    this.scanScopeExpression(def.value, ctx, targetLoc);
+                } else if (stmt.kind === "ExpressionStatement") {
+                    this.scanScopeExpression(
+                        (stmt as ExpressionStatement).expression,
+                        ctx,
+                        targetLoc,
+                    );
+                } else if (stmt.kind === "ReturnStatement") {
+                    const ret = stmt as any;
+                    if (ret.value)
+                        this.scanScopeExpression(ret.value, ctx, targetLoc);
+                }
+            }
+        }
+    }
+
+    private scanScopeExpression(
+        expr: Expression,
+        ctx: ScanContext,
+        loc: { line: number; col: number },
+    ) {
+        if (!this.contains(expr, loc)) return;
+
+        if (expr.type === "LambdaExpression") {
+            // Enter lambda scope
+            const lambda = expr as any; // LambdaExpression
+            const lambdaCtx: ScanContext = {
+                vars: new Map(),
+                signatures: new Map(),
+                parent: ctx,
+                expectedReturnType: lambda.returnType,
+            };
+            // Register params
+            for (const param of lambda.params) {
+                lambdaCtx.vars.set(param.name, param.type);
+            }
+            this.deepestScope = lambdaCtx;
+
+            if (lambda.body) {
+                if (Array.isArray(lambda.body)) {
+                    this.scanScope(lambda.body, lambdaCtx, loc);
+                } else {
+                    this.scanScopeExpression(
+                        lambda.body as Expression,
+                        lambdaCtx,
+                        loc,
+                    );
+                }
+            }
+            return;
+        }
+
+        // Other expressions that contain children?
+        if (expr.type === "BinaryExpression") {
+            // dive
+            if (this.contains(expr.left, loc))
+                this.scanScopeExpression(expr.left, ctx, loc);
+            if (this.contains(expr.right, loc))
+                this.scanScopeExpression(expr.right, ctx, loc);
+        } else if (expr.type === "CallExpression") {
+            for (const arg of expr.arguments) {
+                if (this.contains(arg, loc))
+                    this.scanScopeExpression(arg, ctx, loc);
+            }
+        } else if (expr.type === "TypeConversionExpression") {
+            this.scanScopeExpression(expr.value, ctx, loc);
+        } else if (expr.type === "TypeCheckExpression") {
+            this.scanScopeExpression(expr.value, ctx, loc);
+        }
+    }
+
+    private contains(
+        node: {
+            loc?: {
+                line: number;
+                col: number;
+                endLine?: number;
+                endCol?: number;
+            };
+        },
+        loc: { line: number; col: number },
+    ): boolean {
+        if (!node.loc) return false;
+        const startLine = node.loc.line;
+        const startCol = node.loc.col;
+
+        // Simple check: loc is after start.
+        if (loc.line < startLine) return false;
+        if (loc.line === startLine && loc.col < startCol) return false;
+
+        // Check end if available or assume it contains if it starts before?
+        // Ideally checking end is better.
+        // Using same logic as ASTUtils
+        const endLine =
+            node.loc.endLine !== undefined ? node.loc.endLine : startLine; // Fallback? default to big?
+        const endCol = node.loc.endCol !== undefined ? node.loc.endCol : 99999;
+
+        if (loc.line > endLine) return false;
+        if (loc.line === endLine && loc.col > endCol) return false;
+
+        return true;
     }
 }

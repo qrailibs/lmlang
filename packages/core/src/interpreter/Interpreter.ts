@@ -1,5 +1,5 @@
 import chalk from "chalk";
-import { packages } from "@lmlang/library";
+import { packages, RuntimeValue } from "@lmlang/library";
 import { AST } from "../parser/types";
 import {
     Expression,
@@ -62,6 +62,10 @@ export class Interpreter {
         for (const statement of ast.statements) {
             await this.executeStatement(statement);
         }
+    }
+
+    public getVariable(name: string): RuntimeValue | undefined {
+        return this.context.get(name);
     }
 
     private async executeStatement(stmt: Statement): Promise<void> {
@@ -518,14 +522,3 @@ export class Interpreter {
         return new Error(message);
     }
 }
-
-export type RuntimeValue =
-    | { type: "str"; value: string }
-    | { type: "int"; value: number }
-    | { type: "dbl"; value: number }
-    | { type: "bool"; value: boolean }
-    | { type: "obj"; value: any }
-    | { type: "nil"; value: null | undefined }
-    | { type: "func"; value: Function }
-    | { type: "unknown"; value: unknown }
-    | { type: "err"; value: unknown };

@@ -262,9 +262,12 @@ export class Lexer {
     }
 
     private advance() {
-        if (this.currentChar() === "\n") {
+        const char = this.currentChar();
+        if (char === "\n") {
             this.line++;
             this.col = 1;
+        } else if (char === "\t") {
+            this.col += 4;
         } else {
             this.col++;
         }

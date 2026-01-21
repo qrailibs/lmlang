@@ -1,4 +1,4 @@
-import { RuntimeValue } from "./Interpreter";
+import { RuntimeValue } from "@lmlang/library";
 
 export class Context {
     private variables: Map<string, RuntimeValue> = new Map();
