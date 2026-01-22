@@ -277,4 +277,63 @@ export class ASTUtils {
             }
         }
     }
+
+    /**
+     * Traverses the AST to find all RuntimeLiteral nodes.
+     */
+    public static findRuntimeLiterals(node: ASTNode | AST): any[] {
+        const results: any[] = [];
+
+        function visit(n: any) {
+            if (!n) return;
+
+            if (n.type === "RuntimeLiteral" || n.kind === "RuntimeLiteral") {
+                results.push(n);
+            }
+
+            if (n.statements && Array.isArray(n.statements)) {
+                n.statements.forEach(visit);
+            }
+            if (n.value && typeof n.value === "object") {
+                visit(n.value);
+            }
+            if (n.expression && typeof n.expression === "object") {
+                visit(n.expression);
+            }
+            if (n.left && typeof n.left === "object") {
+                visit(n.left);
+            }
+            if (n.right && typeof n.right === "object") {
+                visit(n.right);
+            }
+            if (
+                n.body &&
+                (Array.isArray(n.body) || typeof n.body === "object")
+            ) {
+                if (Array.isArray(n.body)) n.body.forEach(visit);
+                else visit(n.body);
+            }
+            if (n.attributes && typeof n.attributes === "object") {
+                Object.values(n.attributes).forEach(visit);
+            }
+            if (n.arguments && Array.isArray(n.arguments)) {
+                n.arguments.forEach(visit);
+            }
+            if (n.thenBranch && Array.isArray(n.thenBranch)) {
+                n.thenBranch.forEach(visit);
+            }
+            if (n.elseBranch && Array.isArray(n.elseBranch)) {
+                n.elseBranch.forEach(visit);
+            }
+        }
+
+        // Start with root statements
+        if ((node as AST).statements) {
+            (node as AST).statements.forEach(visit);
+        } else {
+            visit(node);
+        }
+
+        return results;
+    }
 }

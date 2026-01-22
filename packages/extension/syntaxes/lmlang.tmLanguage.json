@@ -243,6 +243,48 @@
                     ]
                 },
                 {
+                    "begin": "(<)(bash|shell)(\\b)",
+                    "beginCaptures": {
+                        "1": {
+                            "name": "punctuation.definition.tag.begin.lml"
+                        },
+                        "2": {
+                            "name": "entity.name.tag.lml"
+                        }
+                    },
+                    "end": "(</)(\\2)(>)",
+                    "endCaptures": {
+                        "1": {
+                            "name": "punctuation.definition.tag.begin.lml"
+                        },
+                        "2": {
+                            "name": "entity.name.tag.lml"
+                        },
+                        "3": {
+                            "name": "punctuation.definition.tag.end.lml"
+                        }
+                    },
+                    "patterns": [
+                        {
+                            "begin": "\\G",
+                            "end": "(>)",
+                            "endCaptures": {
+                                "1": {
+                                    "name": "punctuation.definition.tag.end.lml"
+                                }
+                            },
+                            "patterns": [
+                                {
+                                    "include": "#tag-attributes"
+                                }
+                            ]
+                        },
+                        {
+                            "include": "source.shell"
+                        }
+                    ]
+                },
+                {
                     "begin": "(<)([a-zA-Z_][a-zA-Z0-9_]*)(\\b)",
                     "beginCaptures": {
                         "1": {

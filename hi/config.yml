@@ -1,0 +1,4 @@
+entrypoint: "app.lml"
+containers:
+    bash:
+        runtime: "bash"

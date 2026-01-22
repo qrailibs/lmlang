@@ -724,4 +724,18 @@ export class Scanner {
 
         return true;
     }
+    public getAvailableModules(): string[] {
+        return Object.keys(packages);
+    }
+
+    public getModuleExports(
+        moduleName: string,
+    ): Record<string, any> | undefined {
+        // Return exports of the package
+        if (packages[moduleName]) {
+            // We return the package object itself which contains the exports
+            return packages[moduleName];
+        }
+        return undefined;
+    }
 }

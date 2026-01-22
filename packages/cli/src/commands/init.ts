@@ -47,12 +47,12 @@ export const initCommand = {
             );
             console.log(chalk.gray(`Created ${name}/.gitignore`));
 
-            // 3. Create config.yaml
+            // 3. Create config.yml
             await fs.writeFile(
-                nodePath.join(projectDir, "config.yaml"),
+                nodePath.join(projectDir, "config.yml"),
                 DEFAULT_CONFIG,
             );
-            console.log(chalk.gray(`Created ${name}/config.yaml`));
+            console.log(chalk.gray(`Created ${name}/config.yml`));
 
             // 4. Create app.lml
             await fs.writeFile(

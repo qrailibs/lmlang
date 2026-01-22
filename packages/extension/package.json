@@ -24,14 +24,20 @@
     ],
     "dependencies": {
         "@lmlang/core": "workspace:*",
+        "js-yaml": "^4.1.1",
         "vscode-languageclient": "^9.0.1",
         "vscode-languageserver": "^9.0.1",
-        "vscode-languageserver-textdocument": "^1.0.11"
+        "vscode-languageserver-textdocument": "^1.0.11",
+        "vscode-uri": "^3.1.0"
     },
     "devDependencies": {
+        "@types/jest": "^30.0.0",
+        "@types/js-yaml": "^4.0.9",
         "@types/node": "^20.0.0",
         "@types/vscode": "^1.70.0",
         "@vscode/vsce": "^3.7.1",
+        "jest": "^30.2.0",
+        "ts-jest": "^29.4.6",
         "tsup": "^8.0.0",
         "typescript": "^5.0.0"
     },
@@ -56,7 +62,8 @@
                 "path": "./syntaxes/lmlang.tmLanguage.json",
                 "embeddedLanguages": {
                     "meta.embedded.block.javascript": "javascript",
-                    "meta.embedded.block.python": "python"
+                    "meta.embedded.block.python": "python",
+                    "meta.embedded.block.shell": "shellscript"
                 }
             }
         ]

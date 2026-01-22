@@ -1,6 +1,0 @@
-entrypoint: "app.lml"
-containers:
-    py:
-        runtime: "python"
-        dependencies:
-            - "numpy"

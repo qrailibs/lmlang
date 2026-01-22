@@ -4,7 +4,7 @@ export interface ProjectConfig {
 }
 
 export interface ContainerConfig {
-    runtime: "nodejs" | "python";
+    runtime: "nodejs" | "python" | "bash";
     packageManager?: string;
     dependencies?: Record<string, string> | string[];
 }

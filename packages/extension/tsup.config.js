@@ -1,6 +1,7 @@
-import { defineConfig } from "tsup";
-
-export default defineConfig({
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+const tsup_1 = require("tsup");
+exports.default = (0, tsup_1.defineConfig)({
     entry: ["src/extension.ts", "src/server.ts"],
     format: ["cjs"],
     external: ["vscode"],
@@ -9,10 +10,8 @@ export default defineConfig({
         "vscode-languageclient",
         "vscode-languageserver",
         "vscode-languageserver-textdocument",
-        "js-yaml",
-        "vscode-uri",
-        "chalk",
     ],
     clean: true,
     sourcemap: true,
 });
+//# sourceMappingURL=tsup.config.js.map

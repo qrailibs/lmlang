@@ -1,6 +1,7 @@
 import {write} from "lmlang/io";
 
-int a = 100
-str b = a~str
+str msg = <bash data={"world"}>
+	echo "Hello ${data}!"
+</bash>
 
-write(b)
+write(msg)

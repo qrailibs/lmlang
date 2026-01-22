@@ -18,6 +18,19 @@ import {
     SignatureHelp,
 } from "vscode-languageserver";
 
+import * as fs from "fs";
+import * as path from "path";
+import * as yaml from "js-yaml";
+import { URI } from "vscode-uri";
+import {
+    ProjectConfig,
+    ContainerConfig,
+    AST,
+    ASTNode,
+    RuntimeLiteral,
+} from "@lmlang/core"; // Assuming types are exported from core
+import { findConfigFile } from "./utils";
+
 // Create a connection for the server, using Node's IPC as a transport.
 // Also include all preview / proposed LSP features.
 const connection = createConnection(ProposedFeatures.all);
@@ -91,6 +104,12 @@ documents.onDidChangeContent((change) => {
     validateTextDocument(change.document);
 });
 
+// Helper to find config file in parent directories
+// imported from utils.ts
+
+// Helper to find all RuntimeLiteral nodes in AST
+// imported from utils.ts
+
 async function validateTextDocument(textDocument: TextDocument): Promise<void> {
     const code = textDocument.getText();
     const diagnostics: Diagnostic[] = [];
@@ -108,8 +127,10 @@ async function validateTextDocument(textDocument: TextDocument): Promise<void> {
             `[LMLang Server] Scanned. Errors found: ${result.errors.length}`,
         );
 
+        // 1. Core Scanner Errors
         if (result.errors.length > 0) {
             for (const e of result.errors) {
+                // Map error to diagnostic
                 let range = {
                     start: { line: 0, character: 0 },
                     end: { line: 0, character: 1 },
@@ -144,10 +165,70 @@ async function validateTextDocument(textDocument: TextDocument): Promise<void> {
                 diagnostics.push({
                     severity: DiagnosticSeverity.Error,
                     range: range,
-                    message: e.rawMessage || e.message, // rawMessage for short, message for long
+                    message: e.rawMessage || e.message,
                     source: "LMLang",
                 });
             }
+        }
+
+        // 2. Container Validation
+        const configPath = findConfigFile(textDocument.uri);
+        if (configPath) {
+            try {
+                const configContent = fs.readFileSync(configPath, "utf-8");
+                const config = yaml.load(configContent) as ProjectConfig;
+
+                if (config && config.containers) {
+                    const validContainers = Object.keys(config.containers);
+                    connection.console.log(
+                        `[LMLang Server] Valid containers: ${validContainers.join(", ")}`,
+                    );
+
+                    const runtimes = ASTUtils.findRuntimeLiterals(ast);
+                    for (const rt of runtimes) {
+                        if (!validContainers.includes(rt.runtimeName)) {
+                            // Report error
+                            // Report error
+                            let range = {
+                                start: { line: 0, character: 0 },
+                                end: { line: 0, character: 1 },
+                            };
+
+                            if (rt.loc) {
+                                // AST locs are 1-based, LSP is 0-based
+                                const startLine = rt.loc.line - 1;
+                                const startChar = rt.loc.col - 1;
+                                const endLine = rt.loc.endLine
+                                    ? rt.loc.endLine - 1
+                                    : startLine;
+                                const endChar = rt.loc.endCol
+                                    ? rt.loc.endCol - 1
+                                    : startChar + 1;
+
+                                range = {
+                                    start: {
+                                        line: startLine,
+                                        character: startChar,
+                                    },
+                                    end: { line: endLine, character: endChar },
+                                };
+                            }
+
+                            diagnostics.push({
+                                severity: DiagnosticSeverity.Error,
+                                range: range,
+                                message: `Container '${rt.runtimeName}' not found in configuration. Valid containers: ${validContainers.join(", ")}`,
+                                source: "lmlang/container",
+                            });
+                        }
+                    }
+                }
+            } catch (e) {
+                connection.console.error(`[LMLang Server] Config error: ${e}`);
+            }
+        } else {
+            // Optional: warn if no config found?
+            // connection.console.log("[LMLang Server] No config found.");
         }
     } catch (e: unknown) {
         connection.console.error(`[LMLang Server] Validation Error: ${e}`);
@@ -191,18 +272,6 @@ async function validateTextDocument(textDocument: TextDocument): Promise<void> {
                 severity: DiagnosticSeverity.Error,
                 range,
                 message: message,
-                source: "lmlang/scan",
-            });
-        } else {
-            // Generic JS Error (Lexer errors, crashes, etc)
-            // Report as error at top of file or wherever reasonable
-            diagnostics.push({
-                severity: DiagnosticSeverity.Error,
-                range: {
-                    start: { line: 0, character: 0 },
-                    end: { line: 0, character: 1 },
-                },
-                message: `Internal Error: ${err.message || String(err)}`,
                 source: "lmlang/scan",
             });
         }
@@ -291,7 +360,7 @@ connection.onCompletion((textDocumentPosition): CompletionItem[] => {
             for (const [name, type] of ctx.vars) {
                 // duplicate check?
                 if (!items.some((i) => i.label === name)) {
-                    let kind = CompletionItemKind.Variable;
+                    let kind: CompletionItemKind = CompletionItemKind.Variable;
                     let detail = type;
                     if (type === "func") {
                         kind = CompletionItemKind.Function;

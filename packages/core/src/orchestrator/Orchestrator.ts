@@ -1,4 +1,5 @@
 import { ProjectConfig } from "./Config";
+import { BashContainer } from "./container/BashContainer";
 import { IRuntimeContainer } from "./container/IRuntimeContainer";
 import { NodejsContainer } from "./container/NodejsContainer";
 import { PythonContainer } from "./container/PythonContainer";
@@ -35,6 +36,8 @@ export class Orchestrator {
                     this.projectDir,
                     containerConfig,
                 );
+            } else if (containerConfig.runtime === "bash") {
+                container = new BashContainer();
             } else {
                 console.log(
                     chalk.red(
