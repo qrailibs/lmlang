@@ -1,7 +1,6 @@
 import * as path from "path";
 import * as fs from "fs";
 import { URI } from "vscode-uri";
-import { AST, ASTNode, RuntimeLiteral } from "@lmlang/core";
 
 // Helper to find config file in parent directories
 export function findConfigFile(docUri: string): string | null {

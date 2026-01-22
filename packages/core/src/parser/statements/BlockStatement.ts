@@ -1,5 +1,4 @@
-import { SourceLocation } from "../types";
-import { Statement } from "./index";
+import { SourceLocation, Statement } from "../../types/ast";
 
 export interface BlockStatement {
     kind: "BlockStatement";

@@ -49,7 +49,7 @@ export const runCommand = {
             // 3. Static Analysis (Scanner)
             const lexer = new Lexer(code);
             const tokens = lexer.tokenize();
-            const parser = new Parser(tokens);
+            const parser = new Parser(tokens, code);
             const ast = parser.parse();
 
             const scanner = new Scanner(code);
@@ -61,8 +61,9 @@ export const runCommand = {
 
             // 3.1 Validate Containers (New step)
             // 3.1 Validate Containers (New step)
-            const { ASTUtils, LmlangError } = await import("@lmlang/core");
-            const runtimes = ASTUtils.findRuntimeLiterals(ast);
+            const { findRuntimeLiterals, LmlangError } =
+                await import("@lmlang/core");
+            const runtimes = findRuntimeLiterals(ast);
             const validContainers = Object.keys(config.containers);
 
             for (const rt of runtimes) {

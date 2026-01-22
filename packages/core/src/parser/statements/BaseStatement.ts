@@ -1,4 +1,4 @@
-import { SourceLocation } from "../types";
+import { SourceLocation } from "../../types/ast";
 
 export interface BaseStatement {
     kind: string;

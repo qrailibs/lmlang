@@ -14,7 +14,7 @@ describe("Parser", () => {
         const input = `write("Sum output:", 200);`;
         const lexer = new Lexer(input);
         const tokens = lexer.tokenize();
-        const parser = new Parser(tokens);
+        const parser = new Parser(tokens, input);
 
         const ast = parser.parse();
         expect(ast.statements).toHaveLength(1);
@@ -40,7 +40,7 @@ describe("Parser", () => {
         const input = `print(100);`;
         const lexer = new Lexer(input);
         const tokens = lexer.tokenize();
-        const parser = new Parser(tokens);
+        const parser = new Parser(tokens, input);
         const ast = parser.parse();
 
         const stmt = ast.statements[0] as ExpressionStatement;
@@ -56,7 +56,7 @@ describe("Parser", () => {
 
     test("parse variable declaration", () => {
         const input = `int a = 10;`;
-        const parser = new Parser(new Lexer(input).tokenize());
+        const parser = new Parser(new Lexer(input).tokenize(), input);
         const ast = parser.parse();
 
         expect(ast.statements).toHaveLength(1);
@@ -69,7 +69,7 @@ describe("Parser", () => {
 
     test("parse function declaration", () => {
         const input = `func add(int a, int b): int { return a + b; }`;
-        const parser = new Parser(new Lexer(input).tokenize());
+        const parser = new Parser(new Lexer(input).tokenize(), input);
         const ast = parser.parse();
 
         expect(ast.statements).toHaveLength(1);
@@ -86,7 +86,7 @@ describe("Parser", () => {
 
     test("parse assignment", () => {
         const input = `a = 20;`;
-        const parser = new Parser(new Lexer(input).tokenize());
+        const parser = new Parser(new Lexer(input).tokenize(), input);
         const ast = parser.parse();
 
         const stmt = ast.statements[0] as AssignmentStatement;
@@ -97,7 +97,7 @@ describe("Parser", () => {
 
     test("parse return statement", () => {
         const input = `return 100;`;
-        const parser = new Parser(new Lexer(input).tokenize());
+        const parser = new Parser(new Lexer(input).tokenize(), input);
         const ast = parser.parse();
 
         const stmt = ast.statements[0] as ReturnStatement;
@@ -107,7 +107,7 @@ describe("Parser", () => {
 
     test("parse import statement", () => {
         const input = `import { Foo } from "bar";`;
-        const parser = new Parser(new Lexer(input).tokenize());
+        const parser = new Parser(new Lexer(input).tokenize(), input);
         const ast = parser.parse();
 
         const stmt = ast.statements[0] as ImportStatement;
@@ -118,7 +118,7 @@ describe("Parser", () => {
 
     test("parse block statement", () => {
         const input = `{ int a = 1; }`;
-        const parser = new Parser(new Lexer(input).tokenize());
+        const parser = new Parser(new Lexer(input).tokenize(), input);
         const ast = parser.parse();
 
         const stmt = ast.statements[0] as BlockStatement;

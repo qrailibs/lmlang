@@ -1,32 +1,26 @@
-import { Lexer } from "./lexer/Lexer";
-import { Parser } from "./parser/Parser";
-import { Scanner } from "./scanner/Scanner";
-import { Interpreter } from "./interpreter/Interpreter";
+// Lexer
+export * from "./lexer/Lexer";
 
-export { Lexer } from "./lexer/Lexer";
-export { Parser } from "./parser/Parser";
-export { Interpreter } from "./interpreter/Interpreter";
-export { TokenType } from "./lexer/TokenType";
-export * from "./parser/types";
+// Parser
+export * from "./parser/Parser";
 export * from "./parser/statements";
-export * from "./parser/expressions";
-export { Orchestrator } from "./orchestrator/Orchestrator";
-export * from "./orchestrator/Config";
+export * from "./types/expression";
+
+// Scanner
+export * from "./scanner/Scanner";
+
+// Interpreter
+export * from "./interpreter/Interpreter";
+
+// Orchestrator
+export * from "./orchestrator/Orchestrator";
 export * from "./orchestrator/container/IRuntimeContainer";
 
-export * from "./scanner/Scanner";
-export { LmlangError, makeError } from "./utils/Error";
-export { ASTUtils } from "./utils/ASTUtils";
+// Types
+export * from "./types/ast";
+export * from "./types/expression";
+export * from "./types/token";
 
-export async function interpret(code: string): Promise<void> {
-    const lexer = new Lexer(code);
-    const tokens = lexer.tokenize();
-    const parser = new Parser(tokens);
-    const ast = parser.parse();
-
-    const scanner = new Scanner(code);
-    scanner.scan(ast);
-
-    const interpreter = new Interpreter();
-    await interpreter.run(ast, code);
-}
+// Utils
+export * from "./utils/err";
+export * from "./utils/ast";

@@ -1,12 +1,12 @@
-import { Scanner } from "./Scanner";
-import { Parser } from "../parser/Parser";
-import { Lexer } from "../lexer/Lexer";
-import { VariableType } from "../parser/types";
+import { Parser } from "../src/parser/Parser";
+import { Lexer } from "../src/lexer/Lexer";
+import { VariableType } from "../src/types/ast";
+import { Scanner } from "../src/scanner/Scanner";
 
 function getScope(code: string, loc: { line: number; col: number }) {
     const lexer = new Lexer(code);
     const tokens = lexer.tokenize();
-    const parser = new Parser(tokens);
+    const parser = new Parser(tokens, code);
     const ast = parser.parse();
 
     // Scanner

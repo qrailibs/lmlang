@@ -1,8 +1,9 @@
+import chalk from "chalk";
 import path from "path";
 import fs from "fs/promises";
 import { spawn, ChildProcess } from "child_process";
-import chalk from "chalk";
-import { ContainerConfig } from "../Config";
+
+import { ContainerConfig } from "../Orchestrator";
 import { IRuntimeContainer } from "./IRuntimeContainer";
 
 const REPL_SCRIPT = `

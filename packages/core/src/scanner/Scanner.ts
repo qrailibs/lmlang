@@ -1,15 +1,13 @@
-import { packages } from "@lmlang/library";
-import { AST, VariableType, FunctionReturnType } from "../parser/types";
+import { packages, FunctionSignature } from "@lmlang/library";
+
 import {
-    Statement,
     DefStatement,
     ExpressionStatement,
     AssignmentStatement,
 } from "../parser/statements";
-import { Expression } from "../parser/expressions";
-import { makeError, LmlangError } from "../utils/Error";
-
-import { FunctionSignature } from "@lmlang/library/dist/types";
+import { Expression } from "../types/expression";
+import { makeError, LmlangError } from "../utils/err";
+import { AST, FunctionReturnType, Statement, VariableType } from "../types/ast";
 
 interface ScanContext {
     vars: Map<string, VariableType>;
@@ -45,8 +43,8 @@ export class Scanner {
 
     public scan(ast: AST): ScannerResult {
         this.errors = [];
-        // Use a fresh context for each scan (resets vars)
         this.globalContext = { vars: new Map(), signatures: new Map() };
+
         this.initializeBuiltins();
 
         for (const stmt of ast.statements) {
@@ -56,9 +54,6 @@ export class Scanner {
                 if (e.name === "LmlangError" || e instanceof LmlangError) {
                     this.errors.push(e);
                 } else {
-                    // Fallback for unknown errors
-                    // Try to extract location if possible from parser error pattern or default to 0,0
-                    // But assume it's just a message if generic
                     this.errors.push(
                         makeError(
                             this.source,
@@ -724,6 +719,7 @@ export class Scanner {
 
         return true;
     }
+
     public getAvailableModules(): string[] {
         return Object.keys(packages);
     }

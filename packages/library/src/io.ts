@@ -1,5 +1,5 @@
-import { unify } from "./utils/unify";
 import { RuntimeValue } from "./types";
+import { unify } from "./utils/unify";
 import { native } from "./utils/native";
 
 export const io = {

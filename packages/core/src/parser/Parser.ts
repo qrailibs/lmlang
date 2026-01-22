@@ -1,23 +1,31 @@
-import { Token } from "../lexer/Token";
-import { TokenType } from "../lexer/TokenType";
-import { AST, SourceLocation, VariableType } from "./types";
-import { Expression, RuntimeLiteral, CallExpression } from "./expressions";
+import { AST, SourceLocation, Statement, VariableType } from "../types/ast";
 import {
-    Statement,
+    Token,
+    TOKEN_TO_VAR_TYPE,
+    TokenType,
+    TYPE_TOKENS,
+} from "../types/token";
+import { makeError } from "../utils/err";
+import {
+    Expression,
+    RuntimeLiteral,
+    CallExpression,
+} from "../types/expression";
+import {
     DefStatement,
     ImportStatement,
     ReturnStatement,
     AssignmentStatement,
 } from "./statements";
-import { TOKEN_TO_VAR_TYPE, TYPE_TOKENS } from "./TypeHelpers";
-import { LmlangError } from "../utils/Error";
 
 export class Parser {
     private tokens: Token[];
     private current: number = 0;
+    private source: string;
 
-    constructor(tokens: Token[]) {
+    constructor(tokens: Token[], source: string) {
         this.tokens = tokens;
+        this.source = source;
     }
 
     public parse(): AST {
@@ -799,6 +807,6 @@ export class Parser {
     }
 
     private error(token: Token, message: string): Error {
-        return new LmlangError(message, this.getLoc(token));
+        return makeError(this.source, this.getLoc(token), message);
     }
 }

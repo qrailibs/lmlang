@@ -21,6 +21,7 @@ export class Context {
         }
         return undefined;
     }
+
     public assign(name: string, value: RuntimeValue): void {
         if (this.variables.has(name)) {
             this.variables.set(name, value);

@@ -1,5 +1,5 @@
 import { Lexer } from "../src/lexer/Lexer";
-import { TokenType } from "../src/lexer/TokenType";
+import { TokenType } from "../src/types/token";
 
 describe("Lexer", () => {
     test("tokenize runtime block", () => {

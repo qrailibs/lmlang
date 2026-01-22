@@ -1,3 +1,5 @@
+import * as fs from "fs";
+import * as yaml from "js-yaml";
 import {
     createConnection,
     TextDocuments,
@@ -9,33 +11,27 @@ import {
     TextDocumentSyncKind,
     InitializeResult,
 } from "vscode-languageserver/node";
-import { TextDocument } from "vscode-languageserver-textdocument";
-import { Lexer, LmlangError, Parser, Scanner, ASTUtils } from "@lmlang/core";
 import {
     CompletionItem,
     CompletionItemKind,
     Hover,
     SignatureHelp,
 } from "vscode-languageserver";
-
-import * as fs from "fs";
-import * as path from "path";
-import * as yaml from "js-yaml";
-import { URI } from "vscode-uri";
+import { TextDocument } from "vscode-languageserver-textdocument";
 import {
+    Lexer,
+    Parser,
+    Scanner,
     ProjectConfig,
-    ContainerConfig,
-    AST,
-    ASTNode,
-    RuntimeLiteral,
-} from "@lmlang/core"; // Assuming types are exported from core
+    findRuntimeLiterals,
+    findNodeAt,
+    findNodeStack,
+} from "@lmlang/core";
+
 import { findConfigFile } from "./utils";
 
-// Create a connection for the server, using Node's IPC as a transport.
-// Also include all preview / proposed LSP features.
 const connection = createConnection(ProposedFeatures.all);
 
-// Create a simple text document manager.
 const documents: TextDocuments<TextDocument> = new TextDocuments(TextDocument);
 
 let hasConfigurationCapability = false;
@@ -117,7 +113,7 @@ async function validateTextDocument(textDocument: TextDocument): Promise<void> {
     try {
         const lexer = new Lexer(code);
         const tokens = lexer.tokenize();
-        const parser = new Parser(tokens);
+        const parser = new Parser(tokens, code);
         const ast = parser.parse();
 
         // Run Scanner and process structured errors
@@ -184,7 +180,7 @@ async function validateTextDocument(textDocument: TextDocument): Promise<void> {
                         `[LMLang Server] Valid containers: ${validContainers.join(", ")}`,
                     );
 
-                    const runtimes = ASTUtils.findRuntimeLiterals(ast);
+                    const runtimes = findRuntimeLiterals(ast);
                     for (const rt of runtimes) {
                         if (!validContainers.includes(rt.runtimeName)) {
                             // Report error
@@ -341,7 +337,7 @@ connection.onCompletion((textDocumentPosition): CompletionItem[] => {
     try {
         const lexer = new Lexer(text);
         const tokens = lexer.tokenize();
-        const parser = new Parser(tokens);
+        const parser = new Parser(tokens, text);
         const ast = parser.parse();
         const scanner = new Scanner(text);
 
@@ -434,7 +430,7 @@ connection.onHover((params): Hover | null => {
     try {
         const lexer = new Lexer(text);
         const tokens = lexer.tokenize();
-        const parser = new Parser(tokens);
+        const parser = new Parser(tokens, text);
         const ast = parser.parse();
         const scanner = new Scanner(text);
 
@@ -446,7 +442,7 @@ connection.onHover((params): Hover | null => {
 
         // Find the word under cursor is hard without AST node.
         // Use ASTUtils to find node at cursor!
-        const node = ASTUtils.findNodeAt(ast, pos);
+        const node = findNodeAt(ast, pos);
 
         if (node) {
             // If node is VarReference or similar
@@ -493,7 +489,7 @@ connection.onSignatureHelp((params): SignatureHelp | null => {
     try {
         const lexer = new Lexer(text);
         const tokens = lexer.tokenize();
-        const parser = new Parser(tokens);
+        const parser = new Parser(tokens, text);
         const ast = parser.parse();
         const scanner = new Scanner(text);
 
@@ -503,7 +499,7 @@ connection.onSignatureHelp((params): SignatureHelp | null => {
         };
 
         // Find node stack
-        const stack = ASTUtils.findNodeStack(ast, pos);
+        const stack = findNodeStack(ast, pos);
         // Look for call expression in stack (closest to top)
         for (let i = stack.length - 1; i >= 0; i--) {
             const node = stack[i];

@@ -1,5 +1,4 @@
-import { Token } from "./Token";
-import { TokenType } from "./TokenType";
+import { Token, TokenType } from "../types/token";
 
 const KEYWORDS: Record<string, TokenType> = {
     import: TokenType.Import,

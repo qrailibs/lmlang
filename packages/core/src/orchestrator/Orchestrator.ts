@@ -1,9 +1,20 @@
-import { ProjectConfig } from "./Config";
-import { BashContainer } from "./container/BashContainer";
+import chalk from "chalk";
+
 import { IRuntimeContainer } from "./container/IRuntimeContainer";
+import { BashContainer } from "./container/BashContainer";
 import { NodejsContainer } from "./container/NodejsContainer";
 import { PythonContainer } from "./container/PythonContainer";
-import chalk from "chalk";
+
+export interface ProjectConfig {
+    entrypoint: string;
+    containers: Record<string, ContainerConfig>;
+}
+
+export interface ContainerConfig {
+    runtime: "nodejs" | "python" | "bash";
+    packageManager?: string;
+    dependencies?: Record<string, string> | string[];
+}
 
 export class Orchestrator {
     private containers: Map<string, IRuntimeContainer> = new Map();

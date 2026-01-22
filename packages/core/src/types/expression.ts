@@ -1,5 +1,9 @@
-import { VariableType, FunctionReturnType, SourceLocation } from "../types";
-import { Statement } from "../statements";
+import {
+    FunctionReturnType,
+    SourceLocation,
+    Statement,
+    VariableType,
+} from "./ast";
 
 export type Expression =
     | {
@@ -51,7 +55,7 @@ export interface LambdaExpression {
 
 export interface BinaryExpression {
     type: "BinaryExpression";
-    operator: "+" | "-" | "*" | "/";
+    operator: "+" | "-" | "*" | "/" | "%";
     left: Expression;
     right: Expression;
     loc?: SourceLocation;

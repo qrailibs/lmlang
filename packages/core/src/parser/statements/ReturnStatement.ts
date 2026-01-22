@@ -1,5 +1,5 @@
-import { SourceLocation } from "../types";
-import { Expression } from "../expressions";
+import { SourceLocation } from "../../types/ast";
+import { Expression } from "../../types/expression";
 
 export interface ReturnStatement {
     kind: "ReturnStatement";

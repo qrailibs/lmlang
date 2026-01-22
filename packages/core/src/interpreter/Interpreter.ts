@@ -1,23 +1,23 @@
 import chalk from "chalk";
 import { packages, RuntimeValue } from "@lmlang/library";
-import { AST } from "../parser/types";
+
+import { AST, Statement } from "../types/ast";
 import {
+    BinaryExpression,
     Expression,
     RuntimeLiteral,
     TypeCheckExpression,
     TypeConversionExpression,
-    UpdateExpression,
-} from "../parser/expressions";
+} from "../types/expression";
 import {
-    Statement,
     DefStatement,
     ImportStatement,
     ExpressionStatement,
     AssignmentStatement,
 } from "../parser/statements";
 import { Orchestrator } from "../orchestrator/Orchestrator";
+import { makeError } from "../utils/err";
 import { Context } from "./Context";
-import { makeError } from "../utils/Error";
 
 class ReturnSignal {
     constructor(public value: RuntimeValue) {}
@@ -190,22 +190,20 @@ export class Interpreter {
             throw new Error(
                 `Unknown statement type: ${(stmt as any).kind || stmt.constructor.name}`,
             );
-            throw new Error(
-                `Unknown statement type: ${(stmt as any).kind || stmt.constructor.name}`,
-            );
-        } catch (e: any) {
+        } catch (e) {
             if (e instanceof ReturnSignal) throw e; // Propagate return
 
             // Check if it's already a formatted error (starts with Error:)
             // Our makeError returns an Error object where message starts with newline+Color codes etc.
             // But standard Error might wrap it.
             if (
-                e.message &&
-                (e.message.includes("--> line") || e.message.startsWith("\n"))
+                (e as Error).message &&
+                ((e as Error).message.includes("--> line") ||
+                    (e as Error).message.startsWith("\n"))
             ) {
                 throw e;
             }
-            throw this.createError(stmt, e.message);
+            throw this.createError(stmt, (e as Error).message);
         }
     }
 
@@ -364,7 +362,9 @@ export class Interpreter {
         return { type: "str", value: type };
     }
 
-    private async evaluateBinaryExpression(expr: any): Promise<RuntimeValue> {
+    private async evaluateBinaryExpression(
+        expr: BinaryExpression,
+    ): Promise<RuntimeValue> {
         const left = await this.evaluateExpression(expr.left);
         const right = await this.evaluateExpression(expr.right);
 
@@ -400,6 +400,9 @@ export class Interpreter {
                 case "/":
                     result = lVal / rVal;
                     break;
+                case "%":
+                    result = lVal % rVal;
+                    break;
                 default:
                     throw new Error(`Unknown operator ${expr.operator}`);
             }
@@ -419,8 +422,10 @@ export class Interpreter {
                     result = lVal * rVal;
                     break;
                 case "/":
-                    // Always return double for division to capture decimals
                     result = lVal / rVal;
+                    break;
+                case "%":
+                    result = lVal % rVal;
                     break;
                 default:
                     throw new Error(`Unknown operator ${expr.operator}`);
@@ -491,8 +496,9 @@ export class Interpreter {
     }
 
     private wrap(val: any): RuntimeValue {
-        if (val === null || val === undefined)
+        if (val === null || val === undefined) {
             return { type: "nil", value: null };
+        }
         if (typeof val === "number") {
             return Number.isInteger(val)
                 ? { type: "int", value: val }
@@ -502,6 +508,7 @@ export class Interpreter {
         if (typeof val === "boolean") return { type: "bool", value: val };
         if (typeof val === "function") return { type: "func", value: val };
         if (val instanceof Error) return { type: "err", value: val };
+        if (typeof val === "object") return { type: "obj", value: val };
         return { type: "unknown", value: val };
     }
 
@@ -518,6 +525,7 @@ export class Interpreter {
         if (loc) {
             return makeError(this.source, loc, message, hint);
         }
+
         // Fallback if no location
         return new Error(message);
     }

@@ -4,7 +4,7 @@ import { Interpreter } from "../src/interpreter/Interpreter";
 
 describe("Interpreter", () => {
     async function run(input: string) {
-        const parser = new Parser(new Lexer(input).tokenize());
+        const parser = new Parser(new Lexer(input).tokenize(), input);
         const ast = parser.parse();
         const interpreter = new Interpreter();
         // We capture console.log or use a custom orchestrator if needed to verify output
