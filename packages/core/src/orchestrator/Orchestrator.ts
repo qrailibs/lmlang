@@ -59,19 +59,27 @@ export class Orchestrator {
                 throw new Error("Unsupported runtime");
             }
 
-            const startTime = Date.now();
-            console.log(chalk.yellow(`[${name}] Initializing container...`));
-
-            await container.init();
             this.containers.set(name, container);
-
-            const endTime = Date.now();
-            console.log(
-                chalk.green(
-                    `[${name}] Container is ready, took ${endTime - startTime}ms.`,
-                ),
-            );
         }
+
+        await Promise.allSettled(
+            this.containers.entries().map(async ([name, container]) => {
+                const startTime = Date.now();
+                console.log(
+                    chalk.yellow(`[${name}] Initializing container...`),
+                );
+
+                await container.init();
+
+                const endTime = Date.now();
+                const tookSec = ((endTime - startTime) / 1000).toFixed(1);
+                console.log(
+                    chalk.green(
+                        `[${name}] Container is ready, took ${tookSec}s`,
+                    ),
+                );
+            }),
+        );
 
         console.log(
             chalk.bold.magenta("[Orchestrator] All containers is ready.\n"),

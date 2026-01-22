@@ -2,3 +2,5 @@ entrypoint: "app.lml"
 containers:
     bash:
         runtime: "bash"
+    python:
+        runtime: "python"

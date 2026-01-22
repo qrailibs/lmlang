@@ -1,7 +1,12 @@
 import {write} from "lmlang/io";
 
-str msg = <bash data={"world"}>
-	echo "Hello ${data}!"
+str bash_msg = <bash bash_var={"bash"}>
+	echo "Hello from ${bash_var}"
 </bash>
 
-write(msg)
+str py_msg = <python py_var={bash_msg}>
+	return f"{py_var} and Python!"
+</python>
+
+write(bash_msg) // "Hello from bash"
+write(py_msg) // "Hello from bash and Python!"

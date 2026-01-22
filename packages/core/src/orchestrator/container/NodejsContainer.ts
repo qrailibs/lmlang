@@ -127,8 +127,6 @@ export class NodejsContainer implements IRuntimeContainer {
         await fs.writeFile(entrypoint, REPL_SCRIPT);
 
         // 5. Spawn Persistent Process
-        console.log(chalk.yellow(`[${this.name}] Spawning runtime process...`));
-
         this.process = spawn("node", [entrypoint], { cwd: this.cwd });
 
         this.process.stdout?.setEncoding("utf-8");

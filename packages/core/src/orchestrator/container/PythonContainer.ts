@@ -113,7 +113,6 @@ export class PythonContainer implements IRuntimeContainer {
         await fs.writeFile(entrypoint, REPL_SCRIPT);
 
         // 3. Spawn
-        console.log(chalk.yellow(`[${this.name}] Spawning runtime process...`));
 
         // Use python3, set PYTHONPATH to include current dir so installed deps work
         const env = {
