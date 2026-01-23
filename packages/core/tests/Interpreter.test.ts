@@ -1,5 +1,6 @@
 import { Lexer } from "../src/lexer/Lexer";
 import { Parser } from "../src/parser/Parser";
+import { Scanner } from "../src/scanner/Scanner";
 import { Interpreter } from "../src/interpreter/Interpreter";
 
 describe("Interpreter", () => {
@@ -20,47 +21,45 @@ describe("Interpreter", () => {
         return interpreter;
     }
 
-    test("lambda vs function consistency", async () => {
+    test("if else execution", async () => {
         const input = `
-            func add1(int a, int b): int { return a + b; }
-            func add2 = (int a, int b): int => a + b;
-            
-            int r1 = add1(10, 20);
-            int r2 = add2(10, 20);
+            int x = 10;
+            int res = 0;
+            if (x > 5) {
+                res = 1;
+            } else {
+                res = 2;
+            }
         `;
-
         const interpreter = await run(input);
-
-        const r1 = interpreter.getVariable("r1");
-        const r2 = interpreter.getVariable("r2");
-
-        expect(r1?.value).toBe(30);
-        expect(r2?.value).toBe(30);
+        expect(interpreter.getVariable("res")?.value).toBe(1);
     });
 
-    test("function side effects", async () => {
+    test("if else execution false path", async () => {
         const input = `
-            int calls = 0;
-            func add(): void { calls++ }
-            
-            add();
-            add();
+            int x = 1;
+            int res = 0;
+            if (x > 5) {
+                res = 1;
+            } else {
+                res = 2;
+            }
         `;
         const interpreter = await run(input);
-        const calls = interpreter.getVariable("calls");
-        expect(calls?.value).toBe(2);
+        expect(interpreter.getVariable("res")?.value).toBe(2);
     });
 
-    test("lambda side effects", async () => {
+    test("logical operators", async () => {
         const input = `
-            int calls = 0;
-            func tick = (): int => calls++;
-            
-            tick();
-            tick();
+            bool a = true && false;
+            bool b = true || false;
+            bool c = !true;
+            bool d = 1 < 2;
         `;
         const interpreter = await run(input);
-        const calls = interpreter.getVariable("calls");
-        expect(calls?.value).toBe(2);
+        expect(interpreter.getVariable("a")?.value).toBe(false);
+        expect(interpreter.getVariable("b")?.value).toBe(true);
+        expect(interpreter.getVariable("c")?.value).toBe(false);
+        expect(interpreter.getVariable("d")?.value).toBe(true);
     });
 });

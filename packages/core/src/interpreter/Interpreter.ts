@@ -14,6 +14,7 @@ import {
     ImportStatement,
     ExpressionStatement,
     AssignmentStatement,
+    IfStatement,
 } from "../parser/statements";
 import { Orchestrator } from "../orchestrator/Orchestrator";
 import { makeError } from "../utils/err";
@@ -24,7 +25,7 @@ class ReturnSignal {
 }
 
 export class Interpreter {
-    private context: Context = new Context();
+    public context: Context = new Context();
     private orchestrator?: Orchestrator;
     private source: string = "";
 
@@ -54,6 +55,13 @@ export class Interpreter {
                 type: "double",
                 value: Number(arg.value),
             }),
+        });
+        this.context.set("print", {
+            type: "func",
+            value: ((...args: any[]) => {
+                console.log(...args.map((a) => a.value));
+                return { type: "nil", value: null };
+            }) as any,
         });
     }
 
@@ -166,6 +174,27 @@ export class Interpreter {
                 return;
             }
 
+            if (stmt.kind === "IfStatement") {
+                const ifStmt = stmt as IfStatement;
+                const condition = await this.evaluateExpression(
+                    ifStmt.condition,
+                );
+                // We assume strict boolean or truthy?
+                // JS truthy is easy handled by `if (condition.value)`
+                // But strict bool check:
+                if (condition.type !== "bool" && condition.type !== "unknown") {
+                    // For now, let's be strict if known
+                    // Or just check value
+                }
+
+                if (condition.value) {
+                    await this.executeStatement(ifStmt.thenBranch);
+                } else if (ifStmt.elseBranch) {
+                    await this.executeStatement(ifStmt.elseBranch);
+                }
+                return;
+            }
+
             if (stmt.kind === "ReturnStatement") {
                 const retStmt = stmt as any; // Cast
                 const value = await this.evaluateExpression(retStmt.value);
@@ -274,6 +303,12 @@ export class Interpreter {
             }
             if (expr.type === "BinaryExpression") {
                 return await this.evaluateBinaryExpression(expr);
+            }
+            if (expr.type === "UnaryExpression") {
+                const val = await this.evaluateExpression(expr.value);
+                if (expr.operator === "!") {
+                    return { type: "bool", value: !val.value };
+                }
             }
             if (expr.type === "CallExpression") {
                 const funcWrapper = this.context.get(
@@ -403,14 +438,64 @@ export class Interpreter {
                 case "%":
                     result = lVal % rVal;
                     break;
+                case "==":
+                    result = lVal === rVal;
+                    break;
+                case "!=":
+                    result = lVal !== rVal;
+                    break;
+                case "<":
+                    result = lVal < rVal;
+                    break;
+                case ">":
+                    result = lVal > rVal;
+                    break;
+                case "<=":
+                    result = lVal <= rVal;
+                    break;
+                case ">=":
+                    result = lVal >= rVal;
+                    break;
+                case "&&":
+                    result = lVal && rVal;
+                    break;
+                case "||":
+                    result = lVal || rVal;
+                    break;
                 default:
                     throw new Error(`Unknown operator ${expr.operator}`);
             }
             return this.wrap(result);
         }
 
+        if (type === "bool") {
+            if (["==", "!=", "&&", "||"].includes(expr.operator)) {
+                let result: boolean;
+                switch (expr.operator) {
+                    case "==":
+                        result = lVal === rVal;
+                        break;
+                    case "!=":
+                        result = lVal !== rVal;
+                        break;
+                    case "&&":
+                        result = lVal && rVal;
+                        break;
+                    case "||":
+                        result = lVal || rVal;
+                        break;
+                    default:
+                        throw new Error("Unreachable");
+                }
+                return { type: "bool", value: result };
+            }
+            throw new Error(
+                `Operator '${expr.operator}' not supported for type 'bool'`,
+            );
+        }
+
         if (type === "int" || type === "dbl") {
-            let result: number;
+            let result: number | boolean;
             switch (expr.operator) {
                 case "+":
                     result = lVal + rVal;
@@ -427,8 +512,30 @@ export class Interpreter {
                 case "%":
                     result = lVal % rVal;
                     break;
+                case "==":
+                    result = lVal === rVal;
+                    break;
+                case "!=":
+                    result = lVal !== rVal;
+                    break;
+                case "<":
+                    result = lVal < rVal;
+                    break;
+                case ">":
+                    result = lVal > rVal;
+                    break;
+                case "<=":
+                    result = lVal <= rVal;
+                    break;
+                case ">=":
+                    result = lVal >= rVal;
+                    break;
                 default:
                     throw new Error(`Unknown operator ${expr.operator}`);
+            }
+
+            if (typeof result === "boolean") {
+                return { type: "bool", value: result };
             }
 
             // Determine result type

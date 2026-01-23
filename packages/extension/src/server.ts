@@ -435,8 +435,8 @@ connection.onHover((params): Hover | null => {
         const scanner = new Scanner(text);
 
         const pos = {
-            line: params.position.line,
-            col: params.position.character,
+            line: params.position.line + 1,
+            col: params.position.character + 1,
         };
         const scope = scanner.getScopeAt(ast, pos);
 
@@ -445,9 +445,62 @@ connection.onHover((params): Hover | null => {
         const node = findNodeAt(ast, pos);
 
         if (node) {
-            // If node is VarReference or similar
+            let name: string | undefined;
+
+            // 1. Handle VarReference (or similar with varName)
             if ("varName" in node) {
-                const name = (node as any).varName;
+                name = (node as any).varName;
+            }
+            // 2. Handle CallExpression
+            else if ((node as any).type === "CallExpression") {
+                // If cursor is on the callee part?
+                // For now, assume if we are on CallExpression and NOT on arguments, we are on callee.
+                // But findNodeAt dives into arguments. So if we are returned CallExpression, we must be on the callee (or parens).
+                name = (node as any).callee;
+            }
+            // 3. Handle ImportStatement
+            else if ((node as any).kind === "ImportStatement") {
+                const impStmt = node as any;
+                // Find which import we are hovering
+                for (const imp of impStmt.imports) {
+                    // We don't have exact loc for each import specifier in the current AST :(
+                    // But we can check if the name matches the text under cursor?
+                    // Or we can just try to see if the word under cursor matches one of the imports.
+                    // Let's use the scanner to get the word at position? Or regex?
+                    // Simple heuristic: check if `imp.name` or `imp.alias` matches word at cursor.
+                }
+                // Better: The AST for ImportStatement in this parser seems to be monolithic.
+                // If we can't find exact import, we might fail for imports for now or improve Parser to have locs for specifiers.
+                // However, the user specifically mentioned "hover on imported function as ... import".
+
+                // Let's try to infer from text.
+                const offset = document.offsetAt(params.position);
+                // We have to implement getWordAtPosition manually or use regex on line.
+                const lineText = text.split("\n")[params.position.line];
+                const char = params.position.character;
+
+                // Simple word extraction around cursor
+                let start = char;
+                while (start > 0 && /[a-zA-Z0-9_]/.test(lineText[start - 1]))
+                    start--;
+                let end = char;
+                while (
+                    end < lineText.length &&
+                    /[a-zA-Z0-9_]/.test(lineText[end])
+                )
+                    end++;
+                const word = lineText.substring(start, end);
+
+                if (
+                    impStmt.imports.some(
+                        (i: any) => i.name === word || i.alias === word,
+                    )
+                ) {
+                    name = word;
+                }
+            }
+
+            if (name) {
                 // Lookup in scope
                 let ctx: any = scope;
                 while (ctx) {
@@ -456,11 +509,20 @@ connection.onHover((params): Hover | null => {
                         let sigStr = `**${name}**: \`${type}\``;
                         if (type === "func" && ctx.signatures.has(name)) {
                             const sig = ctx.signatures.get(name);
-                            sigStr = `**${name}**\n\n\`(${sig.params
+                            sigStr = `**${name}** \`(${sig.params
                                 .map((p: any) => `${p.type} ${p.name}`)
                                 .join(", ")}): ${sig.returnType}\``;
                             if (sig.description) {
                                 sigStr += `\n\n${sig.description}`;
+                            }
+                            if (sig.params.length > 0) {
+                                sigStr += `\n\n**Parameters:**`;
+                                for (const p of sig.params) {
+                                    sigStr += `\n- \`${p.name}\` (${p.type})`;
+                                    if (p.description) {
+                                        sigStr += `: ${p.description}`;
+                                    }
+                                }
                             }
                         }
                         return {
@@ -494,8 +556,8 @@ connection.onSignatureHelp((params): SignatureHelp | null => {
         const scanner = new Scanner(text);
 
         const pos = {
-            line: params.position.line,
-            col: params.position.character,
+            line: params.position.line + 1,
+            col: params.position.character + 1,
         };
 
         // Find node stack
@@ -556,6 +618,7 @@ connection.onSignatureHelp((params): SignatureHelp | null => {
                                     label: `${callee}(${sig.params.map((p: any) => `${p.type} ${p.name}`).join(", ")})`,
                                     parameters: sig.params.map((p: any) => ({
                                         label: `${p.type} ${p.name}`,
+                                        documentation: p.description,
                                     })),
                                     documentation: sig.description,
                                 },

@@ -4,6 +4,10 @@ const KEYWORDS: Record<string, TokenType> = {
     import: TokenType.Import,
     from: TokenType.From,
     return: TokenType.Return,
+    if: TokenType.If,
+    else: TokenType.Else,
+    true: TokenType.BoolLiteral,
+    false: TokenType.BoolLiteral,
 
     // Type annotations
     str: TokenType.TypeStr,
@@ -18,7 +22,7 @@ const KEYWORDS: Record<string, TokenType> = {
     unknown: TokenType.TypeUnknown,
 
     // Operators
-    type: TokenType.Type,
+    typeof: TokenType.Typeof,
 };
 
 export class Lexer {
@@ -28,8 +32,10 @@ export class Lexer {
     private col: number = 1;
 
     // State for parsing runtime blocks
-    private state: "NORMAL" | "TAG_HEADER" | "TAG_BODY" = "NORMAL";
+    private state: "NORMAL" | "TAG_HEADER" | "TAG_BODY" | "CLOSING_TAG" =
+        "NORMAL";
     private currentTagName: string | null = null;
+    private braceDepth: number = 0;
 
     constructor(input: string) {
         this.input = input;
@@ -68,28 +74,56 @@ export class Lexer {
                     this.advance();
                     tokens.push(this.createToken(TokenType.DivideOp, "/"));
                     this.advance();
+                    this.state = "CLOSING_TAG";
                     continue;
                 }
 
-                // Check if start tag <Identifier
+                if (this.peekChar() === "=") {
+                    tokens.push(this.createToken(TokenType.LessEqual, "<="));
+                    this.advance(); // consume <
+                    this.advance(); // consume =
+                    continue;
+                }
+
                 if (this.isAlpha(this.peekChar())) {
                     tokens.push(this.createToken(TokenType.LAngle, "<"));
                     this.advance();
                     this.state = "TAG_HEADER";
+                    this.braceDepth = 0;
                     continue;
                 }
 
                 // Just LessThan operator
-                tokens.push(this.createToken(TokenType.LAngle, "<"));
+                tokens.push(this.createToken(TokenType.Less, "<"));
                 this.advance();
                 continue;
             }
 
             if (char === ">") {
-                tokens.push(this.createToken(TokenType.RAngle, ">"));
-                this.advance();
+                if (this.peekChar() === "=") {
+                    tokens.push(this.createToken(TokenType.GreaterEqual, ">="));
+                    this.advance(); // consume >
+                    this.advance(); // consume =
+                    continue;
+                }
+
+                let type = TokenType.Greater;
+                let switchToBody = false;
 
                 if (this.state === "TAG_HEADER") {
+                    if (this.braceDepth === 0) {
+                        type = TokenType.RAngle;
+                        switchToBody = true;
+                    }
+                } else if (this.state === "CLOSING_TAG") {
+                    type = TokenType.RAngle;
+                    this.state = "NORMAL";
+                }
+
+                tokens.push(this.createToken(type, ">"));
+                this.advance();
+
+                if (switchToBody) {
                     this.state = "TAG_BODY";
                     // Find the tag name from previous tokens.
                     // Sequence: LAngle, Identifier, [Attributes...], RAngle(just added)
@@ -143,6 +177,41 @@ export class Lexer {
                 this.advance();
                 continue;
             }
+            if (char === "%") {
+                tokens.push(this.createToken(TokenType.ModuloOp, "%"));
+                this.advance();
+                continue;
+            }
+
+            if (char === "!") {
+                if (this.peekChar() === "=") {
+                    tokens.push(this.createToken(TokenType.NotEqual, "!="));
+                    this.advance(); // consume !
+                    this.advance(); // consume =
+                    continue;
+                }
+                tokens.push(this.createToken(TokenType.Bang, "!"));
+                this.advance();
+                continue;
+            }
+
+            if (char === "&") {
+                if (this.peekChar() === "&") {
+                    tokens.push(this.createToken(TokenType.And, "&&"));
+                    this.advance();
+                    this.advance();
+                    continue;
+                }
+            }
+
+            if (char === "|") {
+                if (this.peekChar() === "|") {
+                    tokens.push(this.createToken(TokenType.Or, "||"));
+                    this.advance();
+                    this.advance();
+                    continue;
+                }
+            }
             if (char === "~") {
                 tokens.push(this.createToken(TokenType.ConvertOp, "~"));
                 this.advance();
@@ -154,6 +223,12 @@ export class Lexer {
                     tokens.push(this.createToken(TokenType.Arrow, "=>"));
                     this.advance(); // consume =
                     this.advance(); // consume >
+                    continue;
+                }
+                if (this.peekChar() === "=") {
+                    tokens.push(this.createToken(TokenType.Equal, "=="));
+                    this.advance(); // consume first =
+                    this.advance(); // consume second =
                     continue;
                 }
                 tokens.push(this.createToken(TokenType.Equals, "="));
@@ -178,11 +253,17 @@ export class Lexer {
             }
             if (char === "{") {
                 tokens.push(this.createToken(TokenType.LBrace, "{"));
+                if (this.state === "TAG_HEADER") {
+                    this.braceDepth++;
+                }
                 this.advance();
                 continue;
             }
             if (char === "}") {
                 tokens.push(this.createToken(TokenType.RBrace, "}"));
+                if (this.state === "TAG_HEADER") {
+                    this.braceDepth--;
+                }
                 this.advance();
                 continue;
             }

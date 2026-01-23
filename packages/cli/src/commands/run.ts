@@ -55,12 +55,28 @@ export const runCommand = {
             const scanner = new Scanner(code);
             const scanResult = scanner.scan(ast);
             if (scanResult.errors.length > 0) {
-                // Throw the first error to be caught below
-                throw scanResult.errors[0];
+                let errorLog = `Date: ${new Date().toISOString()}\n`;
+                for (const error of scanResult.errors) {
+                    console.error(error.message);
+                    errorLog += error.message + "\n";
+                }
+
+                const summary = `\nFound ${scanResult.errors.length} errors.`;
+                console.error(chalk.red(summary));
+                errorLog += summary + "\n";
+
+                const logDir = nodePath.join(projectDir, ".lml", "logs");
+                await fs.mkdir(logDir, { recursive: true });
+                const logPath = nodePath.join(logDir, "latest.txt");
+
+                // Strip ANSI codes
+                const cleanLog = errorLog.replace(/\x1B\[[0-9;]*[a-zA-Z]/g, "");
+                await fs.writeFile(logPath, cleanLog, "utf-8");
+
+                process.exit(1);
             }
 
-            // 3.1 Validate Containers (New step)
-            // 3.1 Validate Containers (New step)
+            // 3.1 Validate Containers
             const { findRuntimeLiterals, LmlangError } =
                 await import("@lmlang/core");
             const runtimes = findRuntimeLiterals(ast);

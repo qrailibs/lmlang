@@ -10,7 +10,7 @@ export type RuntimeValue =
     | { type: "err"; value: unknown };
 
 export interface FunctionSignature {
-    params: { name: string; type: string }[];
+    params: { name: string; type: string; description?: string }[];
     returnType: string;
     description?: string;
 }

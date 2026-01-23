@@ -16,6 +16,7 @@ import {
     ImportStatement,
     ReturnStatement,
     AssignmentStatement,
+    IfStatement,
 } from "./statements";
 
 export class Parser {
@@ -111,6 +112,10 @@ export class Parser {
             return this.blockStatement();
         }
 
+        if (this.check(TokenType.If)) {
+            return this.ifStatement();
+        }
+
         if (this.check(TokenType.LAngle)) {
             const expr = this.runtimeLiteral();
             return {
@@ -126,7 +131,7 @@ export class Parser {
             this.check(TokenType.DoubleLiteral) ||
             this.check(TokenType.StringLiteral) ||
             this.check(TokenType.BoolLiteral) ||
-            this.check(TokenType.Type) ||
+            this.check(TokenType.Typeof) ||
             this.check(TokenType.LParen)
         ) {
             const expr = this.expression();
@@ -231,6 +236,30 @@ export class Parser {
             statements,
             loc: this.mergeLoc(this.getLoc(startToken), this.getLoc(endToken)),
         };
+    }
+
+    private ifStatement(): IfStatement {
+        const startToken = this.consume(TokenType.If, "Expected 'if'");
+        this.consume(TokenType.LParen, "Expected '(' after 'if'");
+        const condition = this.expression();
+        this.consume(TokenType.RParen, "Expected ')' after condition");
+
+        const thenBranch = this.statement();
+        let elseBranch: Statement | undefined;
+
+        if (this.match(TokenType.Else)) {
+            elseBranch = this.statement();
+        }
+
+        return new IfStatement(
+            condition,
+            thenBranch,
+            elseBranch,
+            this.mergeLoc(
+                this.getLoc(startToken),
+                elseBranch ? elseBranch.loc : thenBranch.loc,
+            ),
+        );
     }
 
     private defStatement(): DefStatement {
@@ -365,7 +394,100 @@ export class Parser {
     }
 
     private expression(): Expression {
-        return this.term();
+        return this.logicalOr();
+    }
+
+    private logicalOr(): Expression {
+        let left = this.logicalAnd();
+
+        while (this.match(TokenType.Or)) {
+            const operator = "||";
+            const right = this.logicalAnd();
+            left = {
+                type: "BinaryExpression",
+                operator,
+                left,
+                right,
+                loc: this.mergeLoc(left.loc, right.loc),
+            };
+        }
+        return left;
+    }
+
+    private logicalAnd(): Expression {
+        let left = this.equality();
+
+        while (this.match(TokenType.And)) {
+            const operator = "&&";
+            const right = this.equality();
+            left = {
+                type: "BinaryExpression",
+                operator,
+                left,
+                right,
+                loc: this.mergeLoc(left.loc, right.loc),
+            };
+        }
+        return left;
+    }
+
+    private equality(): Expression {
+        let left = this.comparison();
+
+        while (this.match(TokenType.Equal, TokenType.NotEqual)) {
+            const operator =
+                this.previous().type === TokenType.Equal ? "==" : "!=";
+            const right = this.comparison();
+            left = {
+                type: "BinaryExpression",
+                operator: operator as "==" | "!=",
+                left,
+                right,
+                loc: this.mergeLoc(left.loc, right.loc),
+            };
+        }
+        return left;
+    }
+
+    private comparison(): Expression {
+        let left = this.term();
+
+        while (
+            this.match(
+                TokenType.Greater,
+                TokenType.GreaterEqual,
+                TokenType.Less,
+                TokenType.LessEqual,
+            )
+        ) {
+            const token = this.previous();
+            let operator: ">" | ">=" | "<" | "<=";
+            switch (token.type) {
+                case TokenType.Greater:
+                    operator = ">";
+                    break;
+                case TokenType.GreaterEqual:
+                    operator = ">=";
+                    break;
+                case TokenType.Less:
+                    operator = "<";
+                    break;
+                case TokenType.LessEqual:
+                    operator = "<=";
+                    break;
+                default:
+                    throw new Error("Unreachable");
+            }
+            const right = this.term();
+            left = {
+                type: "BinaryExpression",
+                operator,
+                left,
+                right,
+                loc: this.mergeLoc(left.loc, right.loc),
+            };
+        }
+        return left;
     }
 
     private term(): Expression {
@@ -438,6 +560,19 @@ export class Parser {
     }
 
     private unary(): Expression {
+        // ! Operator
+        if (this.match(TokenType.Bang)) {
+            const operatorToken = this.previous();
+            const right = this.unary();
+            return {
+                type: "UnaryExpression",
+                operator: "!",
+                value: right,
+                loc: this.mergeLoc(this.getLoc(operatorToken), right.loc),
+            };
+        }
+
+        // ++/-- Operators
         if (this.match(TokenType.PlusPlus, TokenType.MinusMinus)) {
             const operatorToken = this.previous();
             const operator =
@@ -460,7 +595,8 @@ export class Parser {
             };
         }
 
-        if (this.match(TokenType.Type)) {
+        // typeof Operator
+        if (this.match(TokenType.Typeof)) {
             const token = this.previous();
             const right = this.unary();
             return {
@@ -469,6 +605,7 @@ export class Parser {
                 loc: this.mergeLoc(this.getLoc(token), right.loc),
             };
         }
+
         return this.postfix();
     }
 
@@ -774,6 +911,17 @@ export class Parser {
 
     private consume(type: TokenType, message: string): Token {
         if (this.check(type)) return this.advance();
+
+        if (
+            this.peek().type === TokenType.Identifier &&
+            this.previous().type === TokenType.Identifier
+        ) {
+            throw this.error(
+                this.previous(),
+                `Unknown keyword or identifier "${this.previous().value}"`,
+            );
+        }
+
         throw this.error(this.peek(), message);
     }
 

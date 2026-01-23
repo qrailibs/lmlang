@@ -33,7 +33,7 @@ export type Expression =
     // Operations
     | BinaryExpression
     | TypeCheckExpression
-    | TypeCheckExpression
+    | UnaryExpression
     | TypeConversionExpression
     | UpdateExpression;
 
@@ -55,9 +55,29 @@ export interface LambdaExpression {
 
 export interface BinaryExpression {
     type: "BinaryExpression";
-    operator: "+" | "-" | "*" | "/" | "%";
+    operator:
+        | "+"
+        | "-"
+        | "*"
+        | "/"
+        | "%"
+        | "=="
+        | "!="
+        | "<"
+        | "<="
+        | ">"
+        | ">="
+        | "&&"
+        | "||";
     left: Expression;
     right: Expression;
+    loc?: SourceLocation;
+}
+
+export interface UnaryExpression {
+    type: "UnaryExpression";
+    operator: "!";
+    value: Expression;
     loc?: SourceLocation;
 }
 

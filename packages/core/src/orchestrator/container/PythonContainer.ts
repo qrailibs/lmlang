@@ -99,7 +99,7 @@ export class PythonContainer implements IRuntimeContainer {
         private projectDir: string,
         private config: ContainerConfig,
     ) {
-        this.cwd = path.join(projectDir, ".lml", "python");
+        this.cwd = path.join(projectDir, ".lml", "containers", "python");
     }
 
     async init(): Promise<void> {

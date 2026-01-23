@@ -96,7 +96,7 @@
                     "name": "keyword.control.lml"
                 },
                 {
-                    "match": "\\b(type)\\b",
+                    "match": "\\b(typeof)\\b",
                     "name": "keyword.operator.word.lml"
                 }
             ]
@@ -252,7 +252,7 @@
                             "name": "entity.name.tag.lml"
                         }
                     },
-                    "end": "(</)(\\2)(>)",
+                    "end": "(?:\\s*)(</)(bash|shell)(>)",
                     "endCaptures": {
                         "1": {
                             "name": "punctuation.definition.tag.begin.lml"

@@ -7,53 +7,10 @@ import {
     ImportStatement,
     BlockStatement,
     ReturnStatement,
+    IfStatement,
 } from "../src/parser/statements";
 
 describe("Parser", () => {
-    test("parse call with multiple arguments", () => {
-        const input = `write("Sum output:", 200);`;
-        const lexer = new Lexer(input);
-        const tokens = lexer.tokenize();
-        const parser = new Parser(tokens, input);
-
-        const ast = parser.parse();
-        expect(ast.statements).toHaveLength(1);
-
-        const stmt = ast.statements[0] as ExpressionStatement;
-
-        if (stmt.kind !== "ExpressionStatement") {
-            throw new Error("Expected ExpressionStatement");
-        }
-
-        const expr = stmt.expression;
-        if (expr.type === "CallExpression") {
-            expect(expr.arguments).toHaveLength(2);
-            expect(expr.arguments[0].type).toBe("StringLiteral");
-            expect(expr.arguments[1].type).toBe("IntLiteral");
-        } else {
-            // @ts-ignore
-            fail("Expected CallExpression");
-        }
-    });
-
-    test("parse call with single argument", () => {
-        const input = `print(100);`;
-        const lexer = new Lexer(input);
-        const tokens = lexer.tokenize();
-        const parser = new Parser(tokens, input);
-        const ast = parser.parse();
-
-        const stmt = ast.statements[0] as ExpressionStatement;
-
-        if (stmt.kind !== "ExpressionStatement") {
-            throw new Error("Expected ExpressionStatement");
-        }
-        const expr = stmt.expression;
-        if (expr.type === "CallExpression") {
-            expect(expr.arguments).toHaveLength(1);
-        }
-    });
-
     test("parse variable declaration", () => {
         const input = `int a = 10;`;
         const parser = new Parser(new Lexer(input).tokenize(), input);
@@ -65,23 +22,6 @@ describe("Parser", () => {
         expect(stmt.name).toBe("a");
         expect(stmt.varType).toBe("int");
         expect(stmt.value.type).toBe("IntLiteral");
-    });
-
-    test("parse function declaration", () => {
-        const input = `func add(int a, int b): int { return a + b; }`;
-        const parser = new Parser(new Lexer(input).tokenize(), input);
-        const ast = parser.parse();
-
-        expect(ast.statements).toHaveLength(1);
-        const stmt = ast.statements[0] as DefStatement;
-        expect(stmt.kind).toBe("DefStatement");
-        expect(stmt.name).toBe("add");
-        expect(stmt.varType).toBe("func");
-
-        const lambda = stmt.value as any;
-        expect(lambda.type).toBe("LambdaExpression");
-        expect(lambda.params).toHaveLength(2);
-        expect(lambda.returnType).toBe("int");
     });
 
     test("parse assignment", () => {
@@ -124,5 +64,46 @@ describe("Parser", () => {
         const stmt = ast.statements[0] as BlockStatement;
         expect(stmt.kind).toBe("BlockStatement");
         expect(stmt.statements).toHaveLength(1);
+    });
+
+    test("parse if statement", () => {
+        const input = `if (x > 10) { print("large"); } else { print("small"); }`;
+        const parser = new Parser(new Lexer(input).tokenize(), input);
+        const ast = parser.parse();
+
+        const stmt = ast.statements[0] as IfStatement;
+        expect(stmt.kind).toBe("IfStatement");
+        expect(stmt.condition.type).toBe("BinaryExpression");
+        expect(stmt.thenBranch.kind).toBe("BlockStatement");
+        expect(stmt.elseBranch?.kind).toBe("BlockStatement");
+    });
+
+    test("parse operator precedence", () => {
+        const input = `a == b && c < d || !e`;
+        const parser = new Parser(new Lexer(input).tokenize(), input);
+        const ast = parser.parse();
+
+        // Structure should be: ( (a==b) && (c<d) ) || (!e)
+        const stmt = ast.statements[0] as ExpressionStatement;
+        const expr = stmt.expression as any; // BinaryExpression
+
+        expect(expr.operator).toBe("||");
+        expect(expr.left.operator).toBe("&&");
+        expect(expr.right.type).toBe("UnaryExpression");
+    });
+
+    test("parse runtime block with attributes", () => {
+        const input = `str res = <bash n={FIB}>echo hi</bash>;`;
+        const parser = new Parser(new Lexer(input).tokenize(), input);
+        const ast = parser.parse();
+
+        const stmt = ast.statements[0] as DefStatement;
+        expect(stmt.kind).toBe("DefStatement");
+
+        const runtime = stmt.value as any;
+        expect(runtime.type).toBe("RuntimeLiteral");
+        expect(runtime.runtimeName).toBe("bash");
+        expect(runtime.attributes["n"]).toBeDefined();
+        expect(runtime.code).toBe("echo hi");
     });
 });

@@ -2,22 +2,24 @@ import { FunctionReturnType, Loc } from "./ast";
 
 export enum TokenType {
     // Keywords
-    Import = "Import",
-    From = "From",
-    Return = "Return",
-    Type = "Type", // type
+    Import = "Import", // import
+    From = "From", // from
+    Return = "Return", // return
+    If = "If", // if
+    Else = "Else", // else
+    Typeof = "Typeof", // typeof
 
     // Types
-    TypeStr = "TypeStr",
-    TypeInt = "TypeInt",
-    TypeDbl = "TypeDbl",
-    TypeBool = "TypeBool",
-    TypeObj = "TypeObj",
-    TypeNil = "TypeNil",
-    TypeFunc = "TypeFunc",
-    TypeVoid = "TypeVoid",
-    TypeErr = "TypeErr",
-    TypeUnknown = "TypeUnknown",
+    TypeStr = "TypeStr", // str
+    TypeInt = "TypeInt", // int
+    TypeDbl = "TypeDbl", // dbl
+    TypeBool = "TypeBool", // bool
+    TypeObj = "TypeObj", // obj
+    TypeNil = "TypeNil", // nil
+    TypeFunc = "TypeFunc", // func
+    TypeVoid = "TypeVoid", // void
+    TypeErr = "TypeErr", // err
+    TypeUnknown = "TypeUnknown", // unknown
 
     // Identifiers
     Identifier = "Identifier",
@@ -40,20 +42,33 @@ export enum TokenType {
     PlusOp = "PlusOp", // +
     MinusOp = "MinusOp", // -
     DivideOp = "DivideOp", // /
+    ModuloOp = "ModuloOp", // %
     MultiplyOp = "MultiplyOp", // *
     ConvertOp = "ConvertOp", // ~
     PlusPlus = "PlusPlus", // ++
     MinusMinus = "MinusMinus", // --
 
+    // Logical & Comparison
+    Equal = "Equal", // ==
+    NotEqual = "NotEqual", // !=
+    Greater = "Greater", // >
+    Less = "Less", // <
+    GreaterEqual = "GreaterEqual", // >=
+    LessEqual = "LessEqual", // <=
+    And = "And", // &&
+    Or = "Or", // ||
+    Bang = "Bang", // !
+
     // Literals
-    StringLiteral = "StringLiteral",
-    IntLiteral = "IntLiteral",
-    DoubleLiteral = "DoubleLiteral",
-    BoolLiteral = "BoolLiteral",
+    StringLiteral = "StringLiteral", // "string"
+    IntLiteral = "IntLiteral", // 12345
+    DoubleLiteral = "DoubleLiteral", // 12.345
+    BoolLiteral = "BoolLiteral", // true
 
     // Special
     RuntimeBlockBody = "RuntimeBlockBody", // The raw code inside <runtime>...</runtime>
 
+    // End of file
     EOF = "EOF",
 }
 

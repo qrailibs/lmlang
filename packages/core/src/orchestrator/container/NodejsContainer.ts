@@ -73,7 +73,7 @@ export class NodejsContainer implements IRuntimeContainer {
         private projectDir: string,
         private config: ContainerConfig,
     ) {
-        this.cwd = path.join(projectDir, ".lml", "nodejs");
+        this.cwd = path.join(projectDir, ".lml", "containers", name);
     }
 
     async init(): Promise<void> {

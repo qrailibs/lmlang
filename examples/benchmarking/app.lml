@@ -1,0 +1,73 @@
+import {now} from "lmlang/time";
+import {write} from "lmlang/io";
+
+int FIB = 16
+
+func measure_bash(): void {
+	int start = now()
+
+	str result = <bash n={FIB}>
+		fib() {
+			local n=$1
+			if (( n <= 1 )); then
+				echo $n
+				return
+			fi
+			local a=$(fib $((n-1)))
+			local b=$(fib $((n-2)))
+			echo $((a + b))
+		}
+
+		fib $n
+	</bash> ~ str
+
+	int end = now()
+	int tookMs = end - start
+
+	write("Bash result: " + result)
+	write("Measure bash: " + tookMs~str + "ms")
+}
+
+func measure_py(): void {
+	int start = now()
+
+	str result = <python n={FIB}>
+		def fib(v):
+			if v <= 1:
+				return v
+			return fib(v-1) + fib(v-2)
+
+		return fib(n)
+	</python> ~ str
+
+	int end = now()
+	int tookMs = end - start
+
+	write("Python result: " + result)
+	write("Measure python: " + tookMs~str + "ms")
+}
+
+func measure_lml(): void {
+	func fib(int v): int {
+		if (v <= 1) {
+			return v
+		}
+		return fib(v-1) + fib(v-2)
+	}
+
+	int start = now()
+
+	int result = fib(FIB)
+
+	int end = now()
+	int tookMs = end - start
+
+	write("LML result: " + result~str)
+	write("Measure lml: " + tookMs~str + "ms")
+}
+
+measure_bash()
+write("-")
+measure_py()
+write("-")
+measure_lml()

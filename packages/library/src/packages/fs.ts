@@ -1,7 +1,7 @@
 import path from "path";
 import nativeFs from "fs";
-import { RuntimeValue } from "./types";
-import { native } from "./utils/native";
+import { RuntimeValue } from "../types";
+import { native } from "../utils/native";
 
 export const fs = {
     /**

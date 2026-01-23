@@ -5,6 +5,7 @@ import {
     ExpressionStatement,
     ImportStatement,
     ReturnStatement,
+    IfStatement,
 } from "../parser/statements";
 import { Expression } from "./expression";
 
@@ -14,7 +15,8 @@ export type Statement =
     | ExpressionStatement
     | ReturnStatement
     | BlockStatement
-    | AssignmentStatement;
+    | AssignmentStatement
+    | IfStatement;
 
 export interface Loc {
     line: number;

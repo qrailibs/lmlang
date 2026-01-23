@@ -4,6 +4,7 @@ import {
     DefStatement,
     ExpressionStatement,
     AssignmentStatement,
+    IfStatement,
 } from "../parser/statements";
 import { Expression } from "../types/expression";
 import { makeError, LmlangError } from "../utils/err";
@@ -23,7 +24,7 @@ export interface ScannerResult {
 export class Scanner {
     private source: string;
     private errors: LmlangError[] = [];
-    private globalContext: ScanContext = {
+    public globalContext: ScanContext = {
         vars: new Map(),
         signatures: new Map(),
     };
@@ -38,6 +39,7 @@ export class Scanner {
         this.globalContext.vars.set("str", "func");
         this.globalContext.vars.set("int", "func");
         this.globalContext.vars.set("double", "func");
+        this.globalContext.vars.set("print", "func"); // Builtin print
         // Add other builtins if needed
     }
 
@@ -70,6 +72,21 @@ export class Scanner {
     private scanStatement(stmt: Statement, ctx: ScanContext) {
         if (stmt.kind === "DefStatement") {
             const defStmt = stmt as DefStatement;
+            // If it's a function, we must register it BEFORE scanning the value (to support recursion)
+            if (defStmt.varType === "func") {
+                // Register variable early
+                ctx.vars.set(defStmt.name, defStmt.varType);
+
+                // If value is Lambda, register signatures too
+                const lambda = defStmt.value as any;
+                if (lambda.type === "LambdaExpression") {
+                    ctx.signatures.set(defStmt.name, {
+                        params: lambda.params,
+                        returnType: lambda.returnType,
+                    });
+                }
+            }
+
             const exprType = this.inferExpressionType(defStmt.value, ctx);
 
             // Type check assignment
@@ -93,8 +110,10 @@ export class Scanner {
                 );
             }
 
-            // Register variable
-            ctx.vars.set(defStmt.name, defStmt.varType);
+            // Register variable (if not already for func)
+            if (defStmt.varType !== "func") {
+                ctx.vars.set(defStmt.name, defStmt.varType);
+            }
             return;
         }
 
@@ -131,6 +150,44 @@ export class Scanner {
                     assignStmt.loc || { line: 0, col: 0 },
                     `Type Mismatch: Cannot assign '${valueType}' to '${targetType}'`,
                 );
+            }
+            return;
+        }
+
+        if (stmt.kind === "IfStatement") {
+            const ifStmt = stmt as IfStatement;
+            const condType = this.inferExpressionType(ifStmt.condition, ctx);
+
+            if (condType !== "bool" && condType !== "unknown") {
+                throw makeError(
+                    this.source,
+                    ifStmt.condition.loc || { line: 0, col: 0 },
+                    `Condition must be 'bool', got '${condType}'`,
+                );
+            }
+
+            this.scanStatement(ifStmt.thenBranch, ctx);
+            if (ifStmt.elseBranch) {
+                this.scanStatement(ifStmt.elseBranch, ctx);
+            }
+            return;
+        }
+
+        if (stmt.kind === "IfStatement") {
+            const ifStmt = stmt as IfStatement;
+            const condType = this.inferExpressionType(ifStmt.condition, ctx);
+
+            if (condType !== "bool" && condType !== "unknown") {
+                throw makeError(
+                    this.source,
+                    ifStmt.condition.loc || { line: 0, col: 0 },
+                    `Condition must be 'bool', got '${condType}'`,
+                );
+            }
+
+            this.scanStatement(ifStmt.thenBranch, ctx);
+            if (ifStmt.elseBranch) {
+                this.scanStatement(ifStmt.elseBranch, ctx);
             }
             return;
         }
@@ -302,6 +359,42 @@ export class Scanner {
                     `Operator '${expr.operator}' not supported for type '${leftType}'`,
                 );
             }
+
+            // Comparison & Logical
+            if (["==", "!=", "<", ">", "<=", ">="].includes(expr.operator)) {
+                // Determine if comparable
+                if (leftType === rightType) return "bool";
+                // Allow mixing int/dbl?
+                if (
+                    (leftType === "int" || leftType === "dbl") &&
+                    (rightType === "int" || rightType === "dbl")
+                )
+                    return "bool";
+
+                throw makeError(
+                    this.source,
+                    expr.loc || { line: 0, col: 0 },
+                    `Cannot compare '${leftType}' and '${rightType}'`,
+                );
+            }
+
+            if (["&&", "||"].includes(expr.operator)) {
+                if (leftType !== "bool") {
+                    throw makeError(
+                        this.source,
+                        expr.left.loc || { line: 0, col: 0 },
+                        `Logical operator expects 'bool', got '${leftType}'`,
+                    );
+                }
+                if (rightType !== "bool") {
+                    throw makeError(
+                        this.source,
+                        expr.right.loc || { line: 0, col: 0 },
+                        `Logical operator expects 'bool', got '${rightType}'`,
+                    );
+                }
+                return "bool";
+            }
         }
 
         if (expr.type === "CallExpression") {
@@ -442,6 +535,20 @@ export class Scanner {
                 }
             }
             return "unknown"; // runtime result is unknown
+        }
+
+        if (expr.type === "UnaryExpression") {
+            const valType = this.inferExpressionType(expr.value, ctx);
+            if (expr.operator === "!") {
+                if (valType !== "bool" && valType !== "unknown") {
+                    throw makeError(
+                        this.source,
+                        expr.loc || { line: 0, col: 0 },
+                        `Operator '!' expects 'bool', got '${valType}'`,
+                    );
+                }
+                return "bool";
+            }
         }
 
         if (expr.type === "LambdaExpression") {
@@ -628,6 +735,12 @@ export class Scanner {
                     const ret = stmt as any;
                     if (ret.value)
                         this.scanScopeExpression(ret.value, ctx, targetLoc);
+                } else if (stmt.kind === "IfStatement") {
+                    const ifStmt = stmt as IfStatement;
+                    this.scanScopeExpression(ifStmt.condition, ctx, targetLoc);
+                    this.scanScope([ifStmt.thenBranch], ctx, targetLoc); // Recurse statement
+                    if (ifStmt.elseBranch)
+                        this.scanScope([ifStmt.elseBranch], ctx, targetLoc);
                 }
             }
         }
@@ -684,6 +797,8 @@ export class Scanner {
         } else if (expr.type === "TypeConversionExpression") {
             this.scanScopeExpression(expr.value, ctx, loc);
         } else if (expr.type === "TypeCheckExpression") {
+            this.scanScopeExpression(expr.value, ctx, loc);
+        } else if (expr.type === "UnaryExpression") {
             this.scanScopeExpression(expr.value, ctx, loc);
         }
     }

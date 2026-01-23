@@ -24,8 +24,8 @@ describe("Type Operators", () => {
         expect(expr.value.type).toBe("IntLiteral");
     });
 
-    test("parse type check", () => {
-        const input = `type 100;`;
+    test("parse typeof check", () => {
+        const input = `typeof 100;`;
         const parser = new Parser(new Lexer(input).tokenize(), input);
         const ast = parser.parse();
 
@@ -82,8 +82,8 @@ describe("Type Operators", () => {
     });
 
     test("precedence: type check unary", () => {
-        const input = `type 100 + " is correct";`;
-        // (type 100) + ...
+        const input = `typeof 100 + " is correct";`;
+        // (typeof 100) + ...
 
         const parser = new Parser(new Lexer(input).tokenize(), input);
         const ast = parser.parse();

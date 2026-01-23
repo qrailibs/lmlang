@@ -18,3 +18,7 @@ str py_msg = <python py_var={bash_msg}>
 write(bash_msg) // "Hello from bash"
 write(py_msg) // "Hello from bash and Python!"
 ```
+
+## Proposals
+
+- [Featured proposals](./proposals/featured/struct.md)
