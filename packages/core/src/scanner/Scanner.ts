@@ -5,10 +5,18 @@ import {
     ExpressionStatement,
     AssignmentStatement,
     IfStatement,
+    ImportStatement,
 } from "../parser/statements";
 import { Expression } from "../types/expression";
 import { makeError, LmlangError } from "../utils/err";
+import { Lexer } from "../lexer/Lexer";
+import { Parser } from "../parser/Parser";
 import { AST, FunctionReturnType, Statement, VariableType } from "../types/ast";
+import {
+    typeToString,
+    typesMatch,
+    validateTypeConversion,
+} from "../utils/typesystem";
 
 interface ScanContext {
     vars: Map<string, VariableType>;
@@ -29,8 +37,18 @@ export class Scanner {
         signatures: new Map(),
     };
 
-    constructor(source: string) {
+    private moduleLoader?: (path: string, base: string) => string | null;
+    private currentFile: string;
+    private scannedModules: Map<string, ScanContext> = new Map();
+
+    constructor(
+        source: string,
+        moduleLoader?: (path: string, base: string) => string | null,
+        currentFile: string = ".",
+    ) {
         this.source = source;
+        this.moduleLoader = moduleLoader;
+        this.currentFile = currentFile;
         this.initializeBuiltins();
     }
 
@@ -92,22 +110,24 @@ export class Scanner {
             // Type check assignment
             // Allow assignment if expression type is 'unknown' (e.g. from runtime literal or complex expression)
             // But if both are known, they must match.
-            if (exprType !== "unknown" && defStmt.varType !== exprType) {
-                // Check specific allowed conversions or mismatches
+            if (
+                exprType !== "unknown" &&
+                !typesMatch(defStmt.varType, exprType)
+            ) {
                 if (defStmt.varType === "dbl" && exprType === "int") {
                     throw makeError(
                         this.source,
                         defStmt.loc || { line: 0, col: 0 },
-                        `Type Mismatch: Cannot assign '${exprType}' to '${defStmt.varType}'`,
+                        `Type Mismatch: Cannot assign '${typeToString(exprType)}' to '${typeToString(defStmt.varType)}'`,
                         "Use double() conversion function.",
                     );
+                } else {
+                    throw makeError(
+                        this.source,
+                        defStmt.loc || { line: 0, col: 0 },
+                        `Type Mismatch: Expected '${typeToString(defStmt.varType)}', got '${typeToString(exprType)}'`,
+                    );
                 }
-
-                throw makeError(
-                    this.source,
-                    defStmt.loc || { line: 0, col: 0 },
-                    `Type Mismatch: Expected '${defStmt.varType}', got '${exprType}'`,
-                );
             }
 
             // Register variable (if not already for func)
@@ -119,13 +139,30 @@ export class Scanner {
 
         if (stmt.kind === "AssignmentStatement") {
             const assignStmt = stmt as AssignmentStatement;
-            const targetType = this.lookupVar(assignStmt.name, ctx);
+            let targetType: VariableType;
 
-            if (!targetType) {
+            // Determine target type based on assignee
+            if (assignStmt.assignee.type === "VarReference") {
+                targetType =
+                    this.lookupVar(assignStmt.assignee.varName, ctx) ||
+                    "unknown";
+                if (!this.lookupVar(assignStmt.assignee.varName, ctx)) {
+                    throw makeError(
+                        this.source,
+                        assignStmt.loc || { line: 0, col: 0 },
+                        `Variable '${assignStmt.assignee.varName}' not found`,
+                    );
+                }
+            } else if (
+                assignStmt.assignee.type === "MemberExpression" ||
+                assignStmt.assignee.type === "IndexExpression"
+            ) {
+                targetType = this.inferExpressionType(assignStmt.assignee, ctx);
+            } else {
                 throw makeError(
                     this.source,
                     assignStmt.loc || { line: 0, col: 0 },
-                    `Variable '${assignStmt.name}' not found`,
+                    "Invalid assignment target. Must be a variable, field, or index.",
                 );
             }
 
@@ -134,22 +171,22 @@ export class Scanner {
             if (
                 targetType !== "unknown" &&
                 valueType !== "unknown" &&
-                targetType !== valueType
+                !typesMatch(targetType, valueType)
             ) {
-                // Allow int to dbl assignment?
                 if (targetType === "dbl" && valueType === "int") {
                     throw makeError(
                         this.source,
                         assignStmt.loc || { line: 0, col: 0 },
-                        `Type Mismatch: Cannot assign '${valueType}' to '${targetType}'`,
+                        `Type Mismatch: Cannot assign '${typeToString(valueType)}' to '${typeToString(targetType)}'`,
                         "Use double() conversion or ensure value is double.",
                     );
+                } else {
+                    throw makeError(
+                        this.source,
+                        assignStmt.loc || { line: 0, col: 0 },
+                        `Type Mismatch: Cannot assign '${typeToString(valueType)}' to '${typeToString(targetType)}'`,
+                    );
                 }
-                throw makeError(
-                    this.source,
-                    assignStmt.loc || { line: 0, col: 0 },
-                    `Type Mismatch: Cannot assign '${valueType}' to '${targetType}'`,
-                );
             }
             return;
         }
@@ -201,12 +238,81 @@ export class Scanner {
         }
 
         if (stmt.kind === "ImportStatement") {
-            // For static analysis of imports, we might need to know what they export.
-            // For now, we assume imported things are 'unknown' or just register them if we can't resolve.
-            // The current Interpreter mocks imports if not found.
-            // We can register them as 'unknown' types in context.
-            // Register imports
-            const impStmt = stmt as any;
+            const impStmt = stmt as ImportStatement;
+
+            // Handle local file imports
+            if (impStmt.moduleName.startsWith(".")) {
+                if (!this.moduleLoader) {
+                    throw makeError(
+                        this.source,
+                        impStmt.loc || { line: 0, col: 0 },
+                        `Module loader not configured. Cannot import '${impStmt.moduleName}'`,
+                    );
+                }
+
+                // Resolve path (basic resolution, assumes naive relative path handling for now)
+                // In a real env like Node, we'd use path.resolve. Here we just key by given name or try to be smarter.
+                // Assuming the moduleName is relative to currentFile's directory.
+                // Since we don't have path lib, we rely on the loader to understand the path or we just pass it.
+                // Or better: we let the consumer clean up paths?
+                // Let's assume moduleName IS the path to load.
+                const modulePath = impStmt.moduleName;
+
+                // Check cache
+                if (this.scannedModules.has(modulePath)) {
+                    const moduleCtx = this.scannedModules.get(modulePath)!;
+                    this.registerImports(impStmt, moduleCtx, ctx);
+                    return;
+                }
+
+                // Load module
+                const moduleCode = this.moduleLoader(
+                    modulePath,
+                    this.currentFile,
+                );
+                if (moduleCode === null) {
+                    throw makeError(
+                        this.source,
+                        impStmt.loc || { line: 0, col: 0 },
+                        `Module '${modulePath}' not found (relative to ${this.currentFile})`,
+                    );
+                }
+
+                // Recursive scan
+                try {
+                    const lexer = new Lexer(moduleCode);
+                    const tokens = lexer.tokenize();
+                    const parser = new Parser(tokens, moduleCode);
+                    const ast = parser.parse();
+                    // Provide same loader to recursive scanner
+                    const scanner = new Scanner(
+                        moduleCode,
+                        this.moduleLoader,
+                        modulePath,
+                    );
+                    const result = scanner.scan(ast);
+
+                    // Propagate errors from imported module?
+                    // Maybe. Or just trust it. If it has errors, maybe we shouldn't import.
+                    // But for now let's just use its context.
+                    // Note: scanning populates globalContext of that scanner instance.
+
+                    // Cache results
+                    this.scannedModules.set(modulePath, scanner.globalContext);
+
+                    // Register imports
+                    this.registerImports(impStmt, scanner.globalContext, ctx);
+                } catch (e: any) {
+                    throw makeError(
+                        this.source,
+                        impStmt.loc || { line: 0, col: 0 },
+                        `Error in module '${modulePath}': ${e.message}`,
+                    );
+                }
+                return;
+            }
+
+            // Standard Library Imports
             if (packages[impStmt.moduleName]) {
                 const pkg = packages[impStmt.moduleName];
                 for (const imp of impStmt.imports) {
@@ -310,6 +416,130 @@ export class Scanner {
         if (expr.type === "IntLiteral") return "int";
         if (expr.type === "DoubleLiteral") return "dbl";
         if (expr.type === "BoolLiteral") return "bool";
+        if (expr.type === "ObjectLiteral") {
+            const fields: Record<string, VariableType> = {};
+            const signatures: Record<string, FunctionSignature> = {};
+
+            for (const [key, valExpr] of Object.entries(expr.properties)) {
+                const type = this.inferExpressionType(valExpr, ctx);
+                fields[key] = type;
+
+                // If function/lambda, try to capture signature
+                if (valExpr.type === "LambdaExpression") {
+                    // We can extract signature directly from AST
+                    const lambda = valExpr;
+                    signatures[key] = {
+                        params: lambda.params.map((p) => ({
+                            name: p.name,
+                            type: typeToString(p.type), // Signature uses string representation
+                        })),
+                        returnType: typeToString(lambda.returnType),
+                    };
+                }
+            }
+
+            return {
+                base: "struct",
+                fields,
+                signatures,
+            };
+        }
+
+        if (expr.type === "MemberExpression") {
+            const objType = this.inferExpressionType(expr.object, ctx);
+
+            if (objType === "unknown" || objType === "obj") {
+                return "unknown"; // Cannot validate generic objects
+            }
+
+            if (typeof objType === "object" && objType.base === "struct") {
+                // Check field
+                if (objType.fields && objType.fields[expr.property]) {
+                    return objType.fields[expr.property];
+                }
+                // Check if it's a known signature (method)?
+                if (objType.signatures && objType.signatures[expr.property]) {
+                    return "func";
+                }
+
+                throw makeError(
+                    this.source,
+                    expr.loc || { line: 0, col: 0 },
+                    `Property '${expr.property}' does not exist on type '${typeToString(objType)}'`,
+                );
+            }
+
+            throw makeError(
+                this.source,
+                expr.loc || { line: 0, col: 0 },
+                `Property access on non-object type '${typeToString(objType)}'`,
+            );
+        }
+
+        if (expr.type === "ArrayLiteral") {
+            const unknownArray: VariableType = {
+                base: "array",
+                generic: "unknown",
+            };
+            if (expr.elements.length === 0) return unknownArray;
+
+            // Infer first element
+            const firstType = this.inferExpressionType(expr.elements[0], ctx);
+            if (firstType === "unknown") return unknownArray;
+
+            // Check consistency
+            for (let i = 1; i < expr.elements.length; i++) {
+                const type = this.inferExpressionType(expr.elements[i], ctx);
+                if (!typesMatch(type, firstType) && type !== "unknown") {
+                    throw makeError(
+                        this.source,
+                        expr.elements[i].loc || { line: 0, col: 0 },
+                        `Array element type mismatch: Expected '${typeToString(firstType)}', got '${typeToString(type)}'`,
+                    );
+                }
+            }
+            return { base: "array", generic: firstType };
+        }
+
+        if (expr.type === "IndexExpression") {
+            const objType = this.inferExpressionType(expr.object, ctx);
+            const indexType = this.inferExpressionType(expr.index, ctx);
+
+            if (objType === "unknown") return "unknown";
+
+            // Array Indexing
+            if (typeof objType === "object" && objType.base === "array") {
+                if (indexType !== "int" && indexType !== "unknown") {
+                    throw makeError(
+                        this.source,
+                        expr.index.loc || { line: 0, col: 0 },
+                        `Array index must be 'int', got '${typeToString(indexType)}'`,
+                    );
+                }
+                return objType.generic;
+            }
+
+            // Object Indexing
+            if (
+                objType === "obj" ||
+                (typeof objType === "object" && objType.base === "struct")
+            ) {
+                if (indexType !== "str" && indexType !== "unknown") {
+                    throw makeError(
+                        this.source,
+                        expr.index.loc || { line: 0, col: 0 },
+                        `Object index must be 'str', got '${typeToString(indexType)}'`,
+                    );
+                }
+                return "unknown"; // Dynamic access returns unknown
+            }
+
+            throw makeError(
+                this.source,
+                expr.object.loc || { line: 0, col: 0 },
+                `Cannot index type '${typeToString(objType)}'. Only arrays and objects can be indexed.`,
+            );
+        }
 
         if (expr.type === "VarReference") {
             const type = this.lookupVar(expr.varName, ctx);
@@ -330,22 +560,17 @@ export class Scanner {
             if (leftType === "unknown" || rightType === "unknown")
                 return "unknown";
 
-            if (leftType !== rightType) {
+            if (!typesMatch(leftType, rightType)) {
                 throw makeError(
                     this.source,
                     expr.loc || { line: 0, col: 0 },
-                    `Binary Operation Type Mismatch: '${leftType}' vs '${rightType}'`,
+                    `Binary Operation Type Mismatch: '${typeToString(leftType)}' vs '${typeToString(rightType)}'`,
                 );
             }
 
             // Define return types for operators
             if (["+", "-", "*", "/"].includes(expr.operator)) {
                 if (leftType === "int" || leftType === "dbl") {
-                    // Division always returns double in this language?
-                    // Interpreter says: result = lVal / rVal (always double-ish equivalent in JS numbers)
-                    // Interpreter: if (type === "dbl") return "dbl"; if int and result is int -> int.
-                    // Static analysis: can't know if result is int for division.
-                    // Let's assume arithmetic on int produces int unless division?
                     if (expr.operator === "/") return "dbl";
                     return leftType;
                 }
@@ -353,17 +578,29 @@ export class Scanner {
                     return "str";
                 }
 
+                if (leftType === "obj" && expr.operator === "+") {
+                    return "obj";
+                }
+
+                if (
+                    typeof leftType === "object" &&
+                    leftType.base === "array" &&
+                    expr.operator === "+"
+                ) {
+                    return leftType;
+                }
+
                 throw makeError(
                     this.source,
                     expr.loc || { line: 0, col: 0 },
-                    `Operator '${expr.operator}' not supported for type '${leftType}'`,
+                    `Operator '${expr.operator}' not supported for type '${typeToString(leftType)}'`,
                 );
             }
 
             // Comparison & Logical
             if (["==", "!=", "<", ">", "<=", ">="].includes(expr.operator)) {
                 // Determine if comparable
-                if (leftType === rightType) return "bool";
+                if (typesMatch(leftType, rightType)) return "bool";
                 // Allow mixing int/dbl?
                 if (
                     (leftType === "int" || leftType === "dbl") &&
@@ -374,7 +611,7 @@ export class Scanner {
                 throw makeError(
                     this.source,
                     expr.loc || { line: 0, col: 0 },
-                    `Cannot compare '${leftType}' and '${rightType}'`,
+                    `Cannot compare '${typeToString(leftType)}' and '${typeToString(rightType)}'`,
                 );
             }
 
@@ -383,14 +620,14 @@ export class Scanner {
                     throw makeError(
                         this.source,
                         expr.left.loc || { line: 0, col: 0 },
-                        `Logical operator expects 'bool', got '${leftType}'`,
+                        `Logical operator expects 'bool', got '${typeToString(leftType)}'`,
                     );
                 }
                 if (rightType !== "bool") {
                     throw makeError(
                         this.source,
                         expr.right.loc || { line: 0, col: 0 },
-                        `Logical operator expects 'bool', got '${rightType}'`,
+                        `Logical operator expects 'bool', got '${typeToString(rightType)}'`,
                     );
                 }
                 return "bool";
@@ -399,24 +636,63 @@ export class Scanner {
 
         if (expr.type === "CallExpression") {
             // Check callee
-            const calleeType = this.lookupVar(expr.callee, ctx);
-            if (!calleeType) {
-                throw makeError(
-                    this.source,
-                    expr.loc || { line: 0, col: 0 },
-                    `Function '${expr.callee}' not found`,
+            let calleeType: VariableType;
+            let signature: FunctionSignature | undefined;
+
+            if (expr.callee.type === "VarReference") {
+                calleeType =
+                    this.lookupVar(expr.callee.varName, ctx) || "unknown";
+                if (calleeType === "unknown") {
+                    // Check if it's not found vs just unknown type
+                    if (!this.lookupVar(expr.callee.varName, ctx)) {
+                        throw makeError(
+                            this.source,
+                            expr.loc || { line: 0, col: 0 },
+                            `Function '${expr.callee.varName}' not found`,
+                        );
+                    }
+                }
+                signature = this.lookupSignature(expr.callee.varName, ctx);
+            } else if (expr.callee.type === "MemberExpression") {
+                // Determine object type to find signature
+                const objType = this.inferExpressionType(
+                    expr.callee.object,
+                    ctx,
                 );
+                if (typeof objType === "object" && objType.base === "struct") {
+                    if (
+                        objType.signatures &&
+                        objType.signatures[expr.callee.property]
+                    ) {
+                        signature = objType.signatures[expr.callee.property];
+                        calleeType = "func";
+                    } else if (
+                        objType.fields &&
+                        objType.fields[expr.callee.property]
+                    ) {
+                        calleeType = objType.fields[expr.callee.property];
+                    } else {
+                        // Error logic handled in member expr inference or here?
+                        // If we inferred MemberExpression before, it would have thrown if missing.
+                        // But here we need signature.
+                        calleeType = "unknown";
+                    }
+                } else {
+                    calleeType = "unknown";
+                }
+            } else {
+                calleeType = this.inferExpressionType(expr.callee, ctx);
             }
+
             if (calleeType !== "func" && calleeType !== "unknown") {
                 throw makeError(
                     this.source,
                     expr.loc || { line: 0, col: 0 },
-                    `'${expr.callee}' is not a function. It is '${calleeType}'`,
+                    `Callee is not a function. It is '${typeToString(calleeType)}'`,
                 );
             }
 
             // Check args and signature
-            const signature = this.lookupSignature(expr.callee, ctx);
 
             if (signature) {
                 // Verify arg count
@@ -488,18 +764,29 @@ export class Scanner {
             }
 
             // Return type of function call?
-            // Since we don't have function signatures yet, we have to assume 'unknown'
-            // OR checks built-ins.
-            if (expr.callee === "str") return "str";
-            if (expr.callee === "int") return "int";
-            if (expr.callee === "double") return "dbl";
+            // Built-in casting functions
+            if (expr.callee.type === "VarReference") {
+                if (expr.callee.varName === "str") return "str";
+                if (expr.callee.varName === "int") return "int";
+                if (expr.callee.varName === "double") return "dbl";
+            }
 
+            // Since we don't have function signatures for everything yet, we have to assume 'unknown'
             return "unknown";
         }
 
         if (expr.type === "TypeConversionExpression") {
-            // Recursive check
-            this.inferExpressionType(expr.value, ctx);
+            const sourceType = this.inferExpressionType(expr.value, ctx);
+            // Validate conversion
+            try {
+                validateTypeConversion(sourceType, expr.targetType);
+            } catch (e: any) {
+                throw makeError(
+                    this.source,
+                    expr.loc || { line: 0, col: 0 },
+                    e.message,
+                );
+            }
             return expr.targetType;
         }
 
@@ -848,5 +1135,37 @@ export class Scanner {
             return packages[moduleName];
         }
         return undefined;
+    }
+
+    private registerImports(
+        impStmt: ImportStatement,
+        sourceCtx: ScanContext,
+        targetCtx: ScanContext,
+    ) {
+        for (const imp of impStmt.imports) {
+            const exportName = imp.name;
+            const alias = imp.alias || imp.name;
+
+            // In our current simple model, we just copy the var type and signature.
+            // Ideally we check if it was marked as exported, but we don't track exports in ScanContext yet.
+            // For now, we assume if it's in the top-level scope of the module, it's importable.
+            // (Strict export checking requires tracking exports in ScanContext)
+
+            if (sourceCtx.vars.has(exportName)) {
+                targetCtx.vars.set(alias, sourceCtx.vars.get(exportName)!);
+                if (sourceCtx.signatures.has(exportName)) {
+                    targetCtx.signatures.set(
+                        alias,
+                        sourceCtx.signatures.get(exportName)!,
+                    );
+                }
+            } else {
+                throw makeError(
+                    this.source,
+                    impStmt.loc || { line: 0, col: 0 },
+                    `Export '${exportName}' not found in module '${impStmt.moduleName}'`,
+                );
+            }
+        }
     }
 }

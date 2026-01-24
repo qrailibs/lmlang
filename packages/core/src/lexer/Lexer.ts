@@ -2,6 +2,7 @@ import { Token, TokenType } from "../types/token";
 
 const KEYWORDS: Record<string, TokenType> = {
     import: TokenType.Import,
+    export: TokenType.Export,
     from: TokenType.From,
     return: TokenType.Return,
     if: TokenType.If,
@@ -20,6 +21,7 @@ const KEYWORDS: Record<string, TokenType> = {
     void: TokenType.TypeVoid,
     err: TokenType.TypeErr,
     unknown: TokenType.TypeUnknown,
+    array: TokenType.TypeArray,
 
     // Operators
     typeof: TokenType.Typeof,
@@ -269,6 +271,16 @@ export class Lexer {
             }
             if (char === ".") {
                 tokens.push(this.createToken(TokenType.Dot, "."));
+                this.advance();
+                continue;
+            }
+            if (char === "[") {
+                tokens.push(this.createToken(TokenType.LBracket, "["));
+                this.advance();
+                continue;
+            }
+            if (char === "]") {
+                tokens.push(this.createToken(TokenType.RBracket, "]"));
                 this.advance();
                 continue;
             }

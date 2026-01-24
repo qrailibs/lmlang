@@ -10,6 +10,7 @@ export const runCommand = {
         }),
     handler: async (argv: any) => {
         const fs = await import("node:fs/promises");
+        const fsSync = await import("node:fs");
         const nodePath = await import("node:path");
         const yaml = await import("js-yaml");
 
@@ -47,12 +48,22 @@ export const runCommand = {
             const code = await fs.readFile(entrypointPath, "utf-8");
 
             // 3. Static Analysis (Scanner)
+            const moduleLoader = (path: string, base: string) => {
+                try {
+                    const dir = nodePath.dirname(base);
+                    const resolved = nodePath.resolve(dir, path);
+                    return fsSync.readFileSync(resolved, "utf-8");
+                } catch (e) {
+                    return null;
+                }
+            };
+
             const lexer = new Lexer(code);
             const tokens = lexer.tokenize();
             const parser = new Parser(tokens, code);
             const ast = parser.parse();
 
-            const scanner = new Scanner(code);
+            const scanner = new Scanner(code, moduleLoader, entrypointPath);
             const scanResult = scanner.scan(ast);
             if (scanResult.errors.length > 0) {
                 let errorLog = `Date: ${new Date().toISOString()}\n`;
@@ -106,7 +117,11 @@ export const runCommand = {
             await orchestrator.init();
 
             // 5. Interpret
-            const interpreter = new Interpreter(orchestrator);
+            const interpreter = new Interpreter(
+                orchestrator,
+                moduleLoader,
+                entrypointPath,
+            );
             await interpreter.run(ast, code);
 
             // Cleanup

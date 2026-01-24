@@ -19,6 +19,6 @@ write(bash_msg) // "Hello from bash"
 write(py_msg) // "Hello from bash and Python!"
 ```
 
-## Proposals
+## Links
 
-- [Featured proposals](./proposals/featured/struct.md)
+- [Featured proposals](./proposals/featured/README.md)

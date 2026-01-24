@@ -30,6 +30,12 @@ export interface AST {
     statements: Statement[];
 }
 
+import {
+    VariableType,
+    PrimitiveType,
+    FunctionSignature,
+} from "@lmlang/library";
+
 export interface SourceLocation {
     line: number;
     col: number;
@@ -38,15 +44,6 @@ export interface SourceLocation {
     endCol: number;
 }
 
-export type VariableType =
-    | "str"
-    | "int"
-    | "dbl"
-    | "bool"
-    | "obj"
-    | "nil"
-    | "func"
-    | "err"
-    | "unknown";
+export { VariableType, PrimitiveType, FunctionSignature };
 
 export type FunctionReturnType = VariableType | "void";

@@ -1,0 +1,6 @@
+entrypoint: "app.lml"
+containers:
+    py:
+        runtime: "python"
+        dependencies:
+            # Add python dependencies here

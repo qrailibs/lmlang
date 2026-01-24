@@ -1,0 +1,8 @@
+import { doubleVal greeting } from "./lib.lml"
+
+print(greeting);
+print(doubleVal(21));
+
+// Should fail if I try to access secret (runtime or static check?)
+// Scanner registers exports. Interpreter executes.
+// Verify simple case first.

@@ -108,6 +108,14 @@
                     "name": "storage.type.lml"
                 },
                 {
+                    "match": "\\b(array)\\b",
+                    "name": "storage.type.lml"
+                },
+                {
+                    "match": "\\[|\\]",
+                    "name": "punctuation.definition.type.lml"
+                },
+                {
                     "match": "\\b[A-Z][a-zA-Z0-9_]*\\b",
                     "name": "entity.name.type.class.lml"
                 }

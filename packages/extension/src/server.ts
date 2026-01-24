@@ -1,4 +1,6 @@
 import * as fs from "fs";
+const _fs_duplicate_was_here = 0; // Removed duplicate
+import * as path from "path";
 import * as yaml from "js-yaml";
 import {
     createConnection,
@@ -10,7 +12,9 @@ import {
     DidChangeConfigurationNotification,
     TextDocumentSyncKind,
     InitializeResult,
+    DidChangeWatchedFilesNotification,
 } from "vscode-languageserver/node";
+import { URI } from "vscode-uri";
 import {
     CompletionItem,
     CompletionItemKind,
@@ -92,6 +96,20 @@ connection.onInitialized(() => {
             connection.console.log("Workspace folder change event received.");
         });
     }
+
+    // Register file watchers
+    connection.client.register(DidChangeWatchedFilesNotification.type, {
+        watchers: [
+            { globPattern: "**/*.lml" },
+            { globPattern: "**/config.yml" },
+        ],
+    });
+});
+
+connection.onDidChangeWatchedFiles((_change) => {
+    connection.console.log("We received an file change event");
+    // Re-validate all open documents
+    documents.all().forEach(validateTextDocument);
 });
 
 // The content of a text document has changed. This event is emitted
@@ -106,6 +124,38 @@ documents.onDidChangeContent((change) => {
 // Helper to find all RuntimeLiteral nodes in AST
 // imported from utils.ts
 
+// Helper to create module loader
+function createModuleLoader(
+    currentUri: string,
+): (path: string, base: string) => string | null {
+    return (importPath: string, base: string) => {
+        try {
+            // Base is URI of current file or simple path
+            let basePath = base;
+            try {
+                if (base.startsWith("file://")) {
+                    basePath = URI.parse(base).fsPath;
+                }
+            } catch (e) {}
+
+            const dir = path.dirname(basePath);
+            const resolvedPath = path.resolve(dir, importPath);
+            const resolvedUri = URI.file(resolvedPath).toString();
+
+            // Check open documents first
+            const doc = documents.get(resolvedUri);
+            if (doc) {
+                return doc.getText();
+            }
+
+            // Read from disk
+            return fs.readFileSync(resolvedPath, "utf-8");
+        } catch (e) {
+            return null;
+        }
+    };
+}
+
 async function validateTextDocument(textDocument: TextDocument): Promise<void> {
     const code = textDocument.getText();
     const diagnostics: Diagnostic[] = [];
@@ -117,7 +167,8 @@ async function validateTextDocument(textDocument: TextDocument): Promise<void> {
         const ast = parser.parse();
 
         // Run Scanner and process structured errors
-        const scanner = new Scanner(code);
+        const moduleLoader = createModuleLoader(textDocument.uri);
+        const scanner = new Scanner(code, moduleLoader, textDocument.uri);
         const result = scanner.scan(ast);
         connection.console.log(
             `[LMLang Server] Scanned. Errors found: ${result.errors.length}`,
@@ -290,7 +341,8 @@ connection.onCompletion((textDocumentPosition): CompletionItem[] => {
     const fromMatch = linePrefix.match(/from\s+["']([^"']*)$/);
     if (fromMatch) {
         try {
-            const scanner = new Scanner(""); // Empty source just to access methods? Or use cached?
+            const moduleLoader = createModuleLoader(document.uri);
+            const scanner = new Scanner("", moduleLoader, document.uri);
             // Scanner constructs with source.
             // But methods are instance methods.
             // Ideally should be static or accessible.
@@ -339,7 +391,9 @@ connection.onCompletion((textDocumentPosition): CompletionItem[] => {
         const tokens = lexer.tokenize();
         const parser = new Parser(tokens, text);
         const ast = parser.parse();
-        const scanner = new Scanner(text);
+        const moduleLoader = createModuleLoader(document.uri);
+        const scanner = new Scanner(text, moduleLoader, document.uri);
+        scanner.scan(ast); // Populate scope
 
         // Loc is 0-indexed in Scanner/AST?
         // textDocumentPosition.position.line is 0-indexed.
@@ -432,7 +486,9 @@ connection.onHover((params): Hover | null => {
         const tokens = lexer.tokenize();
         const parser = new Parser(tokens, text);
         const ast = parser.parse();
-        const scanner = new Scanner(text);
+        const moduleLoader = createModuleLoader(document.uri);
+        const scanner = new Scanner(text, moduleLoader, document.uri);
+        scanner.scan(ast); // Populate scope
 
         const pos = {
             line: params.position.line + 1,
@@ -553,7 +609,9 @@ connection.onSignatureHelp((params): SignatureHelp | null => {
         const tokens = lexer.tokenize();
         const parser = new Parser(tokens, text);
         const ast = parser.parse();
-        const scanner = new Scanner(text);
+        const moduleLoader = createModuleLoader(document.uri);
+        const scanner = new Scanner(text, moduleLoader, document.uri);
+        scanner.scan(ast);
 
         const pos = {
             line: params.position.line + 1,

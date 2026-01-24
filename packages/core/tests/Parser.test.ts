@@ -31,7 +31,7 @@ describe("Parser", () => {
 
         const stmt = ast.statements[0] as AssignmentStatement;
         expect(stmt.kind).toBe("AssignmentStatement");
-        expect(stmt.name).toBe("a");
+        expect(stmt.assignee.type).toBe("VarReference");
         expect(stmt.value.type).toBe("IntLiteral");
     });
 

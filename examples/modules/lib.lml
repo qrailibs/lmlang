@@ -1,0 +1,4 @@
+export func doubleVal(int n) : int { return n * 2; }
+export str greeting = "Hello from Lib";
+
+str secret = "I am secret"; // Not exported

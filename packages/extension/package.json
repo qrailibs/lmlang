@@ -1,8 +1,8 @@
 {
     "name": "lmlang-vscode",
-    "displayName": "LMLang",
-    "description": "Language support for LMLang",
-    "version": "0.2.0",
+    "displayName": "Language support for LML",
+    "description": "Adding support for the `.lml` files: syntax highlighting, live language server with live errors and intellisense.",
+    "version": "1.0.0",
     "publisher": "qrai",
     "main": "./dist/extension.js",
     "activationEvents": [

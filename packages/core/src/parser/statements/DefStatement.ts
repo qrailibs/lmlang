@@ -9,5 +9,6 @@ export class DefStatement implements BaseStatement {
         public value: Expression,
         public varType: VariableType,
         public loc?: SourceLocation,
+        public isExported: boolean = false,
     ) {}
 }

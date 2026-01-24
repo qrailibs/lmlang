@@ -35,7 +35,25 @@ export type Expression =
     | TypeCheckExpression
     | UnaryExpression
     | TypeConversionExpression
-    | UpdateExpression;
+    | UpdateExpression
+    | ArrayLiteral
+    | ObjectLiteral
+    | MemberExpression
+    | IndexExpression;
+
+export interface MemberExpression {
+    type: "MemberExpression";
+    object: Expression;
+    property: string; // Identifier
+    loc?: SourceLocation;
+}
+
+export interface IndexExpression {
+    type: "IndexExpression";
+    object: Expression;
+    index: Expression;
+    loc?: SourceLocation;
+}
 
 export interface UpdateExpression {
     type: "UpdateExpression";
@@ -96,7 +114,7 @@ export interface TypeCheckExpression {
 
 export interface CallExpression {
     type: "CallExpression";
-    callee: string;
+    callee: Expression;
     arguments: Expression[];
     loc?: SourceLocation;
 }
@@ -106,5 +124,17 @@ export interface RuntimeLiteral {
     runtimeName: string;
     attributes: Record<string, Expression>;
     code: string;
+    loc?: SourceLocation;
+}
+
+export interface ArrayLiteral {
+    type: "ArrayLiteral";
+    elements: Expression[];
+    loc?: SourceLocation;
+}
+
+export interface ObjectLiteral {
+    type: "ObjectLiteral";
+    properties: Record<string, Expression>;
     loc?: SourceLocation;
 }

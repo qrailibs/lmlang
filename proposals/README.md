@@ -7,6 +7,7 @@ This is my own list of things that might be implemented into lmlang.
 **Flow**
 
 - [(`foreach`) Foreach loop](./featured/foreach.md)
+- [(`try`) Try statement](./featured/try.md)
 
 **Expressions**
 

@@ -6,7 +6,7 @@ export class AssignmentStatement implements BaseStatement {
     kind = "AssignmentStatement" as const;
 
     constructor(
-        public name: string,
+        public assignee: Expression,
         public value: Expression,
         public loc: SourceLocation,
     ) {}

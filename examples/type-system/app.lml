@@ -1,0 +1,16 @@
+import {write} from "lmlang/io";
+import {renamed} from "./lib/core.lml";
+
+obj Car = {
+	new = func(): obj {
+		return {
+			model = ''
+		} ~ obj
+	}
+}
+
+
+obj bentley = Car.new()
+str field = "model"
+bentley[field] = "Continental GT"
+write(bentley)

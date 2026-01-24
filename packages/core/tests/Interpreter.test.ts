@@ -8,15 +8,6 @@ describe("Interpreter", () => {
         const parser = new Parser(new Lexer(input).tokenize(), input);
         const ast = parser.parse();
         const interpreter = new Interpreter();
-        // We capture console.log or use a custom orchestrator if needed to verify output
-        // But for unit tests, we might want to expose Context or Return values?
-        // The Interpreter doesn't expose context publicly.
-        // We'll wrap check in a way that output is verified or state is checked.
-        // For now, let's verify it runs without error and maybe we can mock Context if we refactor.
-        // Or we can add a helper "evaluate" to Interpreter for testing.
-        // Since we can't easily check state, we'll rely on "return" signals if we wrap in a function call?
-        // Or we can use `print` mock.
-
         await interpreter.run(ast, input);
         return interpreter;
     }
@@ -61,5 +52,46 @@ describe("Interpreter", () => {
         expect(interpreter.getVariable("b")?.value).toBe(true);
         expect(interpreter.getVariable("c")?.value).toBe(false);
         expect(interpreter.getVariable("d")?.value).toBe(true);
+    });
+
+    test("implicit void return", async () => {
+        const input = `
+            func test() {
+                int x = 1;
+            }
+            test();
+        `;
+        // Should not throw
+        await run(input);
+    });
+
+    test("object field assignment", async () => {
+        const input = `
+            obj o = {val = 1};
+            o.val = 2;
+            int res = int(o.val);
+        `;
+        const interpreter = await run(input);
+        expect(interpreter.getVariable("res")?.value).toBe(2);
+    });
+
+    test("array index assignment", async () => {
+        const input = `
+            array[int] arr = [1, 2, 3];
+            arr[0] = 5;
+            int res = arr[0];
+        `;
+        const interpreter = await run(input);
+        expect(interpreter.getVariable("res")?.value).toBe(5);
+    });
+
+    test("object dynamic index assignment", async () => {
+        const input = `
+            obj o = {val = 1};
+            o["key"] = 5;
+            int res = int(o["key"]);
+        `;
+        const interpreter = await run(input);
+        expect(interpreter.getVariable("res")?.value).toBe(5);
     });
 });
